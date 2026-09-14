@@ -14,8 +14,8 @@
 // @connect      cdninstagram.com
 // @connect      fbcdn.net
 // @run-at       document-idle
-// @homepageURL   https://github.com/ChokechaiXD/ig-maxpland
-// @supportURL    https://github.com/ChokechaiXD/ig-maxpland/issues
+// @homepageURL   https://github.com/Stxyu-p/ig-maxpland
+// @supportURL    https://github.com/Stxyu-p/ig-maxpland/issues
 // @license      MIT
 // ==/UserScript==
 
