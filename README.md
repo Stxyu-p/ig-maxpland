@@ -46,7 +46,7 @@ Most Instagram browser extensions inject intrusive popups, harvest your session 
 │ anonymously without      │ posts, zero scroll-jump  │ 3-24 months with safe batching   │
 │ triggering seen beacons  │ layout collapse          │                                  │
 ├──────────────────────────┼──────────────────────────┼──────────────────────────────────┤
-│ 📊 Account Health Audit  │ 📥 Precision Downloader  │ 🛡️ Anti-Detection Hardening      │
+│ 📊 Account Health Audit  │ 📥 Precision Downloader  │ 🛡️ Anti-Detection Hardening    │
 │ Real-time mutual ratios, │ In-feed HD downloads for │ Native header parity, jitter     │
 │ ghost impact, and growth │ photos, videos, stories, │ delays, and zero bot signatures  │
 │ history sparklines       │ carousels & full avatars │                                  │
