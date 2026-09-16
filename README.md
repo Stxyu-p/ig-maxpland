@@ -99,40 +99,187 @@ graph TD
 
 ## 🛠️ Deep-Dive Feature Breakdown
 
-### 1. 👁️ Stealth Story Viewer (Anonymous Mode)
-* **Seen Beacon Interceptor**: Completely traps and blocks outgoing Instagram seen telemetry requests (`/api/v1/stories/reel/seen`, GraphQL story view mutations).
-* **Native Function Masking**: Overrides `fetch` with `Function.prototype.toString` spoofing to display native code signatures, and stores state via `Symbol.for('mp_seen_hooked')` to evade window property scans.
-* **Instant Story Bar Switch**: Toggle stealth mode directly from the floating story toolbar with real-time visual status (`👁️ Stealth: ON / OFF`).
+<details open>
+<summary><h3>👁️ 01 · Stealth Story Viewer (100% Anonymous Mode)</h3></summary>
 
-### 2. 🧹 Clean Feed Mode (No Scroll Bouncing)
-* **Ad & Suggestion Purge**: Automatically detects and hides sponsored posts (`Sponsored`, `ได้รับการสนับสนุน`, `Suggested for you`, `แนะนำสำหรับคุณ`).
-* **Zero-Height Layout Preservation**: Employs `visibility: hidden`, `height: 0`, and `overflow-anchor: none !important;` instead of `display: none` to preserve Instagram's internal React Virtual Scroll tree and eliminate the viewport jumping to top (`scrollTop: 0`).
-* **Header-Targeted Scanner**: Scans exclusively the post header or first 300 characters for minimal DOM parsing overhead.
+> **Watch any story without leaving a trace.** Intercepts and terminates Instagram's seen telemetry beacons at the transport layer while keeping video/photo playback seamless.
 
-### 3. ⏱️ Inactive Following Radar (Dormant Account Detector)
-* **Deep Activity Inspection**: Checks the timestamp of the latest published feed post for every account you follow.
-* **Customizable Inactivity Windows**: Filter accounts that have been dormant for **90 days (3 months)**, **180 days (6 months)**, **365 days (1 year)**, or **730 days (2 years)**.
-* **Batch Safety Guard**: Automatically halts and pauses after inspecting 20 fresh profiles (`BATCH_SAFETY_LIMIT = 20`) with 3.5–6.0s jitter to shield your account from rate limiting.
-* **Persistent Activity Cache**: Caches inspected timestamps in IndexedDB so subsequent scans are instantaneous.
+```
+[ Your Browser ] ───▶ [ Active Story View ]
+                            │
+                            ▼ (Attempts to send Seen Beacon)
+                     ┌────────────────────────────────────────┐
+                     │ 🛑 IG MaxPland Stealth Interceptor     │ ──▶ [ Drops Request ]
+                     │  - Intercepts /api/v1/stories/reel/seen│ ──▶ [ Mocks 200 OK ]
+                     │  - Blocks GraphQL StoryView mutations  │
+                     └────────────────────────────────────────┘
+                            │
+                            ▼
+             [ 👻 You Never Appear in the Viewer List ]
+```
 
-### 4. 📊 Account Health Dashboard & Trend Analytics
-* **Follower / Following Ratio**: Visual badges indicating whether your profile is Creator-heavy, Healthy Balanced, or Consumer-heavy.
-* **Mutual Friendship Rate**: Real-time percentage of reciprocal connections.
-* **Ghost & Inactive Impact**: Aggregated count and health percentage of accounts without avatars or with dormant profiles.
-* **Historical Growth Sparkline**: Clean SVG sparkline tracking historical follower fluctuations across scans without any external charting library.
-* **Strategic Advice**: Actionable tips tailored to your current relationship dynamics.
+| Dimension | Technical Implementation | Safety & Stealth Advantage |
+| :--- | :--- | :--- |
+| **Telemetry Interception** | Hooks global `fetch` to drop `/api/v1/stories/reel/seen` and GraphQL seen mutations | Zero seen receipts transmitted to Meta servers |
+| **Native Anti-Detection** | `Function.prototype.toString` camouflage returns `function fetch() { [native code] }` | Bypasses Instagram automated bot detection scripts |
+| **Window Hygiene** | State stored via `Symbol.for('mp_seen_hooked')` instead of exposed `window` properties | Invisible to third-party DOM / global variable scanners |
+| **One-Click Control** | Floating toggle button injected on active stories (`👁️ Stealth: ON / OFF`) | Seamless on-the-fly toggling with real-time visual feedback |
 
-### 5. 🔍 Relationship Scanner & Batch Unfollower
-* **Categories**: Not Following Back, Fans, Mutuals, Recently Lost (diffed against IndexedDB snapshots), Ghost Accounts, and Inactive Accounts.
-* **Starred Whitelist**: Protect your VIPs, close friends, and creators from accidental unfollowing with 1-click star toggles.
-* **Safe Unfollow Pacing**: Randomized humanized delays (3–5 seconds) with live queue metrics, error recovery, and instant abort capabilities.
-* **Fast Export**: Export clean datasets to CSV, JSON, or copy usernames directly to the clipboard.
+</details>
 
-### 6. 📥 Precision Media Downloader & Vault
-* **In-Feed Action Menu**: Integrated directly into every feed post beside the bookmark icon for 1-click downloads.
-* **Smart Media Resolving**: Downloads original uncompressed photos, progressive MP4 streams, and full multi-slide carousels.
-* **Story & Avatar Tools**: Floating story toolbar to download active videos or cover images, plus an HD avatar badge on profile pages.
-* **Local Media Vault**: IndexedDB archive of all downloaded media items with direct preview links.
+<br>
+
+<details open>
+<summary><h3>🧹 02 · Clean Feed Mode (Zero-Bounce Layout Shield)</h3></summary>
+
+> **A clutter-free home feed with zero scroll jumping.** Strips sponsored ads and algorithmic suggestions while preserving Instagram's React virtual DOM integrity.
+
+```
+[ Instagram Home Feed ] ───▶ [ Incoming Post Chunk ]
+                                   │
+                    Is Post "Sponsored" or "Suggested"?
+                                ╱     ╲
+                            YES        NO
+                            ╱            ╲
+    ┌──────────────────────────────┐     ┌──────────────────────┐
+    │ 🛡️ Apply Zero-Height Layout  │     │  Render Normal Post  │
+    │  - visibility: hidden        │     └──────────────────────┘
+    │  - height: 0 !important      │
+    │  - overflow-anchor: none ⚡  │ ──▶ [ Continuous, Smooth 60fps Scrolling ]
+    └──────────────────────────────┘     [ Zero Bouncing back to Top (0, 0)   ]
+```
+
+| Engineering Pillar | Mechanism | User Impact |
+| :--- | :--- | :--- |
+| **Zero-Height Preservation** | Uses `visibility: hidden; height: 0;` instead of disruptive `display: none` | Keeps React fiber node references intact without DOM collapse |
+| **Scroll-Anchor Lock** | Enforces `overflow-anchor: none !important;` on filtered articles | Prevents Chromium scroll engine from resetting `scrollTop` to 0 |
+| **Header-Targeted Scan** | Inspects exclusively the `<header>` element or first 300 characters | Blazing fast filter execution without re-rendering post trees |
+| **Precise Keyword Filter** | Strictly targets `sponsored`, `ได้รับการสนับสนุน`, `suggested for you`, `แนะนำสำหรับคุณ` | Protects normal posts from followed friends from being hidden |
+
+</details>
+
+<br>
+
+<details open>
+<summary><h3>⏱️ 03 · Inactive Following Radar (Ghost & Dormant Hunter)</h3></summary>
+
+> **Prune abandoned accounts safely.** Detects profiles in your Following list that have stopped posting for months or years, backed by automated rate-limit pacing.
+
+```
+[ Following List ] ──▶ [ Read IndexedDB Activity Cache ]
+                             │
+                      Cached timestamp exists?
+                          ╱          ╲
+                      YES              NO
+                      ╱                  ╲
+        [ Use Cached Date ]      [ Query User's Latest Post ]
+                                         │
+                                  ┌──────────────┴──────────────┐
+                                  │ 🛡️ Safety Batch Guard       │
+                                  │  - Max 20 new users / batch │
+                                  │  - 3.5s - 6.0s jitter pause │
+                                  └─────────────────────────────┘
+```
+
+| Feature Aspect | Specification |
+| :--- | :--- |
+| **Configurable Inactivity Window** | 🎛️ Choose threshold: **90 Days** (3 mo), **180 Days** (6 mo), **365 Days** (1 yr), or **730 Days** (2 yr) |
+| **Batch Safety Ceiling** | 🛑 Enforces `BATCH_SAFETY_LIMIT = 20` fresh queries per session to respect Meta rate limits |
+| **Anti-Detection Jitter** | ⏱️ Randomized humanized pauses (3,500ms – 6,000ms) between profile requests |
+| **Persistent IndexedDB Cache** | 💾 Saves verified last-post timestamps locally; subsequent scans run instantaneously |
+
+</details>
+
+<br>
+
+<details open>
+<summary><h3>📊 04 · Account Health Dashboard & Trend Analytics</h3></summary>
+
+> **Complete relationship intelligence at a single glance.** High-precision balance metrics computed 100% locally from historical snapshots.
+
+```
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                        📈 ACCOUNT HEALTH & GROWTH INTELLIGENCE                         │
+├──────────────────────────┬──────────────────────────┬──────────────────────────────────┤
+│ ⚖️ Follower Ratio        │ 🤝 Mutual Friendship     │ 👻 Ghost Impact                  │
+│ Follower vs Following    │ Reciprocal follow rate   │ Accounts with no avatar +        │
+│ balance & classification │ across your network      │ dormant profiles detected        │
+├──────────────────────────┴──────────────────────────┴──────────────────────────────────┤
+│ 📈 Historical Growth Sparkline (SVG Vector)                                            │
+│   · Plotted from IndexedDB snapshots across scans (Zero external libraries)            │
+│   · Real-time delta tracker (+/- followers since previous snapshot)                    │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│ 💡 Strategic Account Advice                                                            │
+│   · Instant actionable recommendations based on your current network ratios            │
+└────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+| Metric / Tool | Diagnostic Meaning |
+| :--- | :--- |
+| **Follower / Following Ratio** | Categorizes account status: **⭐ Influencer/Creator**, **⚖️ Healthy Balance**, or **🔍 Consumer Heavy** |
+| **Mutual Friendship Rate** | Quantifies true relationship engagement (Mutuals / Total Following) |
+| **Unrequited Outbound** | Highlights total accounts you follow who refuse to follow you back |
+| **Native SVG Sparkline** | Vector curve generated on-the-fly inside the DOM without third-party chart dependencies |
+
+</details>
+
+<br>
+
+<details open>
+<summary><h3>🔍 05 · Relationship Scanner & Safe Batch Unfollower</h3></summary>
+
+> **Deep categorization and human-mimicking unfollow queue.** Keep your network clean with zero risk of account checkpoint flags.
+
+| Category Filter | Description | Safety Action |
+| :--- | :--- | :---: |
+| **Not Following Back** | Accounts you follow that do not follow you back | Batch Unfollow Available |
+| **Fans** | Accounts following you that you do not follow back | View / Whitelist |
+| **Mutuals** | Reciprocal mutual friends | Protected by default |
+| **Recently Lost** | Unfollowers detected by diffing against your IndexedDB snapshot | Alerts & Historical Tracking |
+| **Ghost Accounts** | Suspected bots (default system avatar, zero posts) | Safe Cleanup |
+| **Inactive Radar** | Accounts dormant beyond your configured threshold | One-Click Selection |
+
+> [!TIP]
+> **🛡️ Defensive Unfollow Safeguard:**
+> - **Starred Whitelist**: Mark friends or creators with a star (⭐) to permanently lock them from accidental bulk unfollows.
+> - **JSON Backup / Restore**: Export your Whitelist configuration as a `.json` file to migrate your settings between devices effortlessly.
+> - **Randomized 3–5s Jitter**: Emulates real human clicking behavior with live countdown timers and instant abort controls.
+
+</details>
+
+<br>
+
+<details open>
+<summary><h3>📥 06 · Precision Media Downloader & Vault</h3></summary>
+
+> **Original quality without compromise.** Direct-to-disk streaming for single photos, progressive 1080p MP4 videos, full multi-slide carousels, and stories.
+
+```
+[ Instagram Media ] ──▶ [ MaxPland Native Action Bar ]
+                               │
+            ┌──────────────────┼──────────────────┐
+            ▼                  ▼                  ▼
+     [ Single Media ]   [ Multi Carousel ]  [ Story & Avatar ]
+     · HD Photo (.jpg)  · All slides (1-10) · Uncompressed MP4
+     · 1080p MP4 Video  · Original streams  · HD Profile Avatar
+            │                  │                  │
+            └──────────────────┴──────────────────┘
+                               │
+                               ▼
+        [ Streamed Directly to Disk via GM_download ]
+        (Zero Memory Bloat · Zero In-Browser ZIP Freezes)
+```
+
+| Feature Target | Capability & Details |
+| :--- | :--- |
+| **In-Feed Action Menu** | Sleek dark-glass menu injected next to the bookmark button on every feed post |
+| **1-Click Rapid Download** | Double-click the download icon to immediately grab the active media at max resolution |
+| **Full Carousel Batching** | Downloads every image and video slide in a multi-post with proper sequential naming |
+| **Story Toolbar & Cover** | Floating utility bar on stories to download full video clips, cover art, or open in new tab |
+| **HD Profile Avatar** | Dedicated avatar badge on profile pages to download full uncompressed profile photos |
+| **Local Media Vault** | IndexedDB record of all downloaded assets with direct re-download and inspect links |
+
+</details>
 
 ---
 
