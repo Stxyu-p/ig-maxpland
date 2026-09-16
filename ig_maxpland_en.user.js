@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         IG MaxPland
 // @namespace    http://tampermonkey.net/
-// @version      2.5.0
-// @description  Instagram Relationship Scanner & Clean Media Downloader. Track unfollowers, mutuals, fans, and download full-resolution posts, carousels, and stories.
+// @version      2.6.0
+// @description  Instagram Relationship Scanner & Clean Media Downloader. Track unfollowers, mutuals, fans, stealth story viewer, clean feed, and full-resolution media downloader.
 // @author       P Choke & SORA
 // @match        https://*.instagram.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=instagram.com
@@ -10,6 +10,7 @@
 // @grant        GM_xmlhttpRequest
 // @grant        GM_notification
 // @grant        GM_registerMenuCommand
+// @grant        unsafeWindow
 // @connect      instagram.com
 // @connect      cdninstagram.com
 // @connect      fbcdn.net
@@ -28,15 +29,15 @@
 
     const APP_CONFIG = {
         APP_NAME: 'IG MaxPland',
-        VERSION: '2.5.0',
+        VERSION: '2.6.0',
         DB_NAME: 'IG_MAXPLAND_VAULT',
-        DB_VERSION: 5,
+        DB_VERSION: 6,
         PAGE_SIZE: 50,
         INSTAGRAM_WEB_APP_ID: '936619743392459',
         FOLLOWING_PAGE_SAFETY_LIMIT: 60,
         FOLLOWERS_PAGE_SAFETY_LIMIT: 250,
-        UNFOLLOW_DELAY_MIN: 3000,
-        UNFOLLOW_DELAY_MAX: 5000,
+        UNFOLLOW_DELAY_MIN: 4500,
+        UNFOLLOW_DELAY_MAX: 7500,
         DEFAULT_AVATAR_PATTERNS: [
             '44884218_345707102882519_2446069589734326272_n',
             '464760996_1254146839119862_3605321457742435801_n'
@@ -61,7 +62,13 @@
         LOCK: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`,
         BACKUP: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>`,
         RESTORE: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
-        AVATAR: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>`
+        AVATAR: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>`,
+        EYE: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>`,
+        SHIELD: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`,
+        ANALYTICS: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>`,
+        FEATURES: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>`,
+        SETTINGS: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>`,
+        CLOCK: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`
     };
 
     const NATIVE_IG_CSS = `
@@ -490,6 +497,60 @@
             from { opacity: 0; transform: translateY(4px); }
             to { opacity: 1; transform: translateY(0); }
         }
+
+        /* Feature Cards & Switch Controllers */
+        .maxpland-feature-card {
+            display: flex; align-items: center; justify-content: space-between; gap: 16px;
+            padding: 14px 16px; background: var(--mp-bg-card); border: 1px solid var(--mp-border-card);
+            border-radius: 8px; margin-bottom: 10px; transition: border-color .15s;
+        }
+        .maxpland-feature-card:hover { border-color: var(--mp-border-active); }
+        .maxpland-feature-info { flex: 1; }
+        .maxpland-feature-title { font-size: 13.5px; font-weight: 600; color: var(--mp-text-primary); display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+        .maxpland-feature-desc { font-size: 11.5px; color: var(--mp-text-secondary); line-height: 1.45; }
+        .maxpland-badge-emerald { font-size: 10px; padding: 2px 6px; border-radius: 4px; background: var(--mp-emerald-bg); color: var(--mp-emerald); font-weight: 700; text-transform: uppercase; }
+
+        /* Modern Toggle Switch */
+        .maxpland-switch { position: relative; display: inline-block; width: 42px; height: 22px; flex-shrink: 0; }
+        .maxpland-switch input { opacity: 0; width: 0; height: 0; }
+        .maxpland-slider {
+            position: absolute; cursor: pointer; inset: 0; background-color: var(--mp-bg-hover);
+            transition: .2s cubic-bezier(0.4, 0, 0.2, 1); border-radius: 22px; border: 1px solid var(--mp-border-card);
+        }
+        .maxpland-slider:before {
+            position: absolute; content: ""; height: 16px; width: 16px; left: 2px; bottom: 2px;
+            background-color: var(--mp-text-secondary); transition: .2s cubic-bezier(0.4, 0, 0.2, 1); border-radius: 50%;
+        }
+        .maxpland-switch input:checked + .maxpland-slider { background-color: var(--mp-blue); border-color: var(--mp-blue); }
+        .maxpland-switch input:checked + .maxpland-slider:before { transform: translateX(20px); background-color: #fff; }
+
+        /* Settings Panels */
+        .maxpland-settings-group {
+            background: var(--mp-bg-card); border: 1px solid var(--mp-border-card); border-radius: 8px;
+            padding: 14px 16px; margin-bottom: 12px;
+        }
+        .maxpland-settings-group-title { font-size: 13px; font-weight: 700; color: var(--mp-text-primary); margin: 0 0 10px; display: flex; align-items: center; gap: 6px; }
+        .maxpland-settings-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 0; border-top: 1px solid var(--mp-border-subtle); }
+        .maxpland-settings-row:first-of-type { border-top: none; padding-top: 0; }
+        .maxpland-select {
+            background: var(--mp-bg-panel); color: var(--mp-text-primary); border: 1px solid var(--mp-border-card);
+            border-radius: 6px; padding: 5px 10px; font-size: 12px; outline: none; cursor: pointer;
+        }
+
+        /* Health Dashboard Elements */
+        .maxpland-health-hero {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 14px;
+        }
+        .maxpland-health-card {
+            background: var(--mp-bg-card); border: 1px solid var(--mp-border-card); border-radius: 8px; padding: 14px 16px;
+        }
+        .maxpland-health-title { font-size: 11px; font-weight: 700; color: var(--mp-text-muted); text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px; }
+        .maxpland-health-val { font-size: 22px; font-weight: 800; color: var(--mp-text-primary); font-variant-numeric: tabular-nums; }
+        .maxpland-health-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 3px 8px; border-radius: 5px; font-weight: 600; margin-top: 6px; }
+        .maxpland-chart-box {
+            background: var(--mp-bg-card); border: 1px solid var(--mp-border-card); border-radius: 8px; padding: 16px; margin-bottom: 14px;
+        }
+        .maxpland-sparkline { width: 100%; height: 130px; overflow: visible; }
     `;
 
     /* ==========================================================================
@@ -516,6 +577,9 @@
                     if (!db.objectStoreNames.contains('media_vault')) {
                         const vault = db.createObjectStore('media_vault', { keyPath: 'key' });
                         vault.createIndex('downloaded_at', 'downloaded_at', { unique: false });
+                    }
+                    if (!db.objectStoreNames.contains('user_activity')) {
+                        db.createObjectStore('user_activity', { keyPath: 'id' });
                     }
                 };
                 req.onsuccess = (e) => {
@@ -599,7 +663,7 @@
             if (followers.completed !== true || following.completed !== true) throw new Error('Cannot save snapshot from incomplete scan data');
             const db = await this.init();
             IgBridge.assertAccount(accountId);
-            if (signal?.aborted) throw new DOMException('Scan stopped by user', 'AbortError');
+            if (signal?.aborted) throw new DOMException('Scan aborted by user', 'AbortError');
             return new Promise((resolve, reject) => {
                 const tx = db.transaction('snapshots', 'readwrite');
                 const abort = () => { try { tx.abort(); } catch (_) {} };
@@ -618,7 +682,7 @@
                 store.put(snap);
                 tx.oncomplete = () => { cleanup(); resolve(snap); };
                 tx.onerror = () => { cleanup(); reject(tx.error || new Error('Snapshot write failed')); };
-                tx.onabort = () => { cleanup(); reject(signal?.aborted ? new DOMException('Scan stopped by user', 'AbortError') : tx.error || new Error('Snapshot transaction aborted')); };
+                tx.onabort = () => { cleanup(); reject(signal?.aborted ? new DOMException('Scan aborted by user', 'AbortError') : tx.error || new Error('Snapshot transaction aborted')); };
             });
         }
 
@@ -682,6 +746,58 @@
                 req.onerror = () => resolve([]);
             });
         }
+
+        static async getAllSnapshots(accountId = null, limit = 20) {
+            const db = await this.init();
+            return new Promise((resolve) => {
+                const tx = db.transaction('snapshots', 'readonly');
+                const store = tx.objectStore('snapshots');
+                const req = store.openCursor(null, 'prev');
+                const list = [];
+                req.onsuccess = (e) => {
+                    const cursor = e.target.result;
+                    if (cursor && list.length < limit) {
+                        if (cursor.value.complete === true && (!accountId || String(cursor.value.account_id) === String(accountId))) {
+                            list.push(cursor.value);
+                        }
+                        cursor.continue();
+                    } else {
+                        resolve(list);
+                    }
+                };
+                req.onerror = () => resolve([]);
+            });
+        }
+
+        static async getUserActivity(userId) {
+            const db = await this.init();
+            return new Promise((resolve) => {
+                const tx = db.transaction('user_activity', 'readonly');
+                const req = tx.objectStore('user_activity').get(String(userId));
+                req.onsuccess = () => resolve(req.result || null);
+                req.onerror = () => resolve(null);
+            });
+        }
+
+        static async saveUserActivity(record) {
+            const db = await this.init();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction('user_activity', 'readwrite');
+                tx.objectStore('user_activity').put(record);
+                tx.oncomplete = () => resolve();
+                tx.onerror = () => reject(tx.error);
+            });
+        }
+
+        static async clearActivityCache() {
+            const db = await this.init();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction('user_activity', 'readwrite');
+                tx.objectStore('user_activity').clear();
+                tx.oncomplete = () => resolve();
+                tx.onerror = () => reject(tx.error);
+            });
+        }
     }
 
     /* ==========================================================================
@@ -692,6 +808,7 @@
         static cachedAppId = null;
         static currentUserId = null;
         static currentUsername = null;
+        static wwwClaim = null;
 
         static getAppId() {
             return APP_CONFIG.INSTAGRAM_WEB_APP_ID || '936619743392459';
@@ -816,7 +933,7 @@
 
         static assertAccount(accountId) {
             if (!accountId || this.getCookie('ds_user_id') !== String(accountId)) {
-                throw this.error('Account changed or logged out. Please refresh and try again.', 'ACCOUNT_CHANGED');
+                throw this.error('Account changed or logged out. Please refresh and restart.', 'ACCOUNT_CHANGED');
             }
         }
 
@@ -833,15 +950,21 @@
             this.assertAccount(accountId);
             if (this.cooldownAccount === accountId && Date.now() < this.cooldownUntil) {
                 const seconds = Math.ceil((this.cooldownUntil - Date.now()) / 1000);
-                throw this.error(`Instagram rate limit reached. Please wait ${seconds}s.`, 'RATE_LIMIT', 429);
+                throw this.error(`Instagram rate limit reached. Please wait ${seconds} seconds.`, 'RATE_LIMIT', 429);
             }
             const page = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
             const fetchFn = typeof page.fetch === 'function' ? page.fetch.bind(page) : fetch;
             const method = String(options.method || 'GET').toUpperCase();
             const csrf = this.getCookie('csrftoken');
-            if (method !== 'GET' && !csrf) throw this.error('CSRF token not found. Please refresh Instagram.', 'AUTH');
-            const headers = { 'X-IG-App-ID': this.getAppId(), 'X-Requested-With': 'XMLHttpRequest',
-                'Accept': 'application/json', ...(csrf ? { 'X-CSRFToken': csrf } : {}), ...options.headers };
+            // ponytail: align headers with real Instagram Web client (no X-Requested-With, add X-ASBD-ID and X-IG-WWW-Claim)
+            const headers = {
+                'X-IG-App-ID': this.getAppId(),
+                'X-ASBD-ID': '129477',
+                'X-IG-WWW-Claim': this.wwwClaim || '0',
+                'Accept': '*/*',
+                ...(csrf ? { 'X-CSRFToken': csrf } : {}),
+                ...options.headers
+            };
             const attempts = method === 'GET' ? 3 : 1;
             for (let attempt = 0; attempt < attempts; attempt++) {
                 this.assertAccount(accountId);
@@ -854,6 +977,8 @@
                 try {
                     const res = await fetchFn(target.href, { method, headers, credentials: 'include',
                         body: options.body ?? options.data, signal: controller.signal });
+                    const newClaim = res.headers?.get('x-ig-www-claim');
+                    if (newClaim) this.wwwClaim = newClaim;
                     const text = await res.text();
                     this.assertAccount(accountId);
                     if (options.signal?.aborted) throw new DOMException('Operation aborted by user', 'AbortError');
@@ -862,28 +987,28 @@
                     const message = String(data?.message || data?.error_type || '');
                     const redirected = res.url || '';
                     if (/challenge|checkpoint|consent_required/i.test(message + redirected) || data?.challenge || data?.checkpoint_url) {
-                        throw this.error('Instagram verification required. Please open Instagram and verify your account.', 'CHECKPOINT', res.status);
+                        throw this.error('Instagram requires checkpoint verification. Please solve challenge on Instagram web.', 'CHECKPOINT', res.status);
                     }
                     if (res.status === 401 || /login_required|\/accounts\/login/i.test(message + redirected)) {
-                        throw this.error('Session expired. Please log in to Instagram and refresh.', 'AUTH', res.status);
+                        throw this.error('Session expired. Please log into Instagram and refresh.', 'AUTH', res.status);
                     }
                     if (res.status === 429 || /feedback_required|please wait|try again later|rate.limit/i.test(message)) {
                         const retry = res.headers?.get('Retry-After');
                         const delay = retry && /^\d+(\.\d+)?$/.test(retry) ? Number(retry) * 1000 : Date.parse(retry) - Date.now();
                         this.cooldownUntil = Date.now() + Math.max(60000, Number.isFinite(delay) ? delay : 60000);
                         this.cooldownAccount = accountId;
-                        throw this.error('Instagram rate limit reached. Please wait a moment and try again.', 'RATE_LIMIT', res.status);
+                        throw this.error('Instagram rate limit active. Please rest before trying again.', 'RATE_LIMIT', res.status);
                     }
-                    if (res.status === 403) throw this.error('Instagram forbidden (403). Please verify account status on the website.', 'AUTH', 403);
-                    if (/^\s*</.test(text)) throw this.error('Instagram returned HTML instead of data. Please verify your login and refresh.', 'HTML_RESPONSE', res.status);
+                    if (res.status === 403) throw this.error('Instagram forbidden (403). Check account status on web.', 'AUTH', 403);
+                    if (/^\s*</.test(text)) throw this.error('Instagram returned HTML instead of JSON. Check login status.', 'HTML_RESPONSE', res.status);
                     if (!res.ok) throw this.error(`Instagram responded with HTTP ${res.status}`, 'HTTP', res.status);
-                    if (!data || typeof data !== 'object') throw this.error('Instagram returned invalid payload format.', 'PAYLOAD', res.status);
-                    if (data.status === 'fail' || data.errors?.length) throw this.error('Instagram API request was rejected.', 'API', res.status);
+                    if (!data || typeof data !== 'object') throw this.error('Instagram returned invalid payload format', 'PAYLOAD', res.status);
+                    if (data.status === 'fail' || data.errors?.length) throw this.error('Instagram rejected data request', 'API', res.status);
                     return data;
                 } catch (err) {
                     if (options.signal?.aborted) throw new DOMException('Operation aborted by user', 'AbortError');
                     this.assertAccount(accountId);
-                    if (timedOut) throw this.error('Instagram request timed out after 30 seconds. Please try again.', 'TIMEOUT');
+                    if (timedOut) throw this.error('Instagram request timed out after 30s. Please retry.', 'TIMEOUT');
                     const transient = err.status >= 500 || (!err.code && err.name === 'TypeError');
                     if (!transient || attempt + 1 >= attempts) throw err;
                 } finally {
@@ -900,14 +1025,14 @@
             const accountId = STATE.relationshipAccountId || this.getCookie('ds_user_id');
             this.assertAccount(accountId);
             const csrf = this.getCookie('csrftoken');
-            if (!csrf) throw this.error('CSRF token not found. Please refresh Instagram.', 'AUTH');
+            if (!csrf) throw this.error('CSRF token missing. Please refresh Instagram.', 'AUTH');
 
             const candidateRoutes = [
-                { url: `/web/friendships/${uid}/unfollow/`, headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'x-csrftoken': csrf } },
-                { url: `/api/v1/web/friendships/${uid}/unfollow/`, headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'x-csrftoken': csrf } },
+                { url: `/web/friendships/${uid}/unfollow/`, headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
+                { url: `/api/v1/web/friendships/${uid}/unfollow/`, headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
                 {
                     url: `/api/v1/friendships/destroy/${uid}/`,
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'x-csrftoken': csrf },
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                     body: new URLSearchParams({ user_id: uid, _uid: accountId, _csrftoken: csrf }).toString()
                 }
             ];
@@ -935,7 +1060,7 @@
                     continue;
                 }
             }
-            throw lastError || new Error('Instagram did not confirm unfollow. Please verify on the profile page before trying again.');
+            throw lastError || new Error('Instagram did not confirm unfollow. Check profile on web.');
         }
 
         static async fetchRelationshipPage(endpoint, userId, cursor = null, options = {}) {
@@ -980,7 +1105,7 @@
                         // bypass session challenges, or repeat a rejected request unchanged.
                         if (all.pagesFetched || transport !== 'rest' || err.code !== 'HTTP' || ![400,404].includes(err.status)) throw err;
                         transport = 'graphql';
-                        onProgress?.(0, 0, 'Standard request blocked, attempting fallback route...');
+                        onProgress?.(0, 0, 'Switching to fallback query endpoint...');
                         if (STATE.stopScanFlag) break;
                         data = await this.fetchRelationshipPage(endpoint, userId, null, { transport, signal });
                     }
@@ -994,8 +1119,19 @@
                     const before = all.length;
                     for (const user of data.users) {
                         const id = String(user?.id || user?.pk_id || user?.pk || '');
-                        if (!/^\d+$/.test(id)) throw new Error('Invalid relationship user ID');
-                        if (!seenUsers.has(id)) { seenUsers.add(id); all.push(user); }
+                        if (!/^\d+$/.test(id)) continue;
+                        if (!seenUsers.has(id)) {
+                            seenUsers.add(id);
+                            all.push({
+                                id,
+                                username: user.username || '',
+                                full_name: user.full_name || '',
+                                profile_pic_url: user.profile_pic_url || '',
+                                is_verified: Boolean(user.is_verified),
+                                is_private: Boolean(user.is_private),
+                                has_anonymous_profile_picture: Boolean(user.has_anonymous_profile_picture)
+                            });
+                        }
                     }
                     all.pagesFetched++;
                     onProgress?.(all.length, all.pagesFetched, null);
@@ -1004,11 +1140,11 @@
                     if (!next) { all.completed = true; break; }
                     if (seenCursors.has(next)) throw new Error('Repeated relationship cursor');
                     if (before === all.length) throw new Error('Relationship pagination made no progress');
-                    if (all.pagesFetched >= limit) throw new Error(`Scan reached safety limit of ${limit} pages without completing.`);
+                    if (all.pagesFetched >= limit) throw new Error(`Safety page limit reached (${limit} pages)`);
                     seenCursors.add(next);
                     cursor = next;
-                    // Yield between pages and honor Stop without waiting through a long pause.
-                    const pause = all.pagesFetched % 5 === 0 ? 5000 : 1000;
+                    // Yield between pages and honor Stop without triggering automated activity detection
+                    const pause = all.pagesFetched % 4 === 0 ? (4500 + Math.floor(Math.random() * 2000)) : (2200 + Math.floor(Math.random() * 1200));
                     for (let ms = 0; ms < pause && !STATE.stopScanFlag; ms += 250) await sleep(250);
                 }
             } catch (err) {
@@ -1034,7 +1170,7 @@
             const mediaId = this.shortcodeToMediaId(shortcode);
             const data = await this.request(`/api/v1/media/${mediaId}/info/`);
             const item = (data.items || [])[0];
-            if (!item) throw new Error('Media information not found.');
+            if (!item) throw new Error('Media item not found');
             return item;
         }
 
@@ -1075,11 +1211,47 @@
             } catch (_) {}
             return null;
         }
+
+        static async fetchUserLastPost(userId, options = {}) {
+            const uid = String(userId || '');
+            if (!/^\d+$/.test(uid)) throw new Error('Invalid user ID');
+            const accountId = STATE.relationshipAccountId || this.getCookie('ds_user_id');
+            this.assertAccount(accountId);
+            const data = await this.request(`/api/v1/feed/user/${uid}/?count=1`, { ...options, accountId });
+            const item = (data?.items || [])[0];
+            return {
+                has_posts: Boolean(item),
+                last_taken_at: item?.taken_at || null,
+                total_posts: data?.num_results ?? (item ? 1 : 0)
+            };
+        }
     }
 
     /* ==========================================================================
        4. CONTROLLER & STATE
        ========================================================================== */
+
+    const DEFAULT_PREFS = {
+        stealthStory: true,
+        cleanFeed: true,
+        quickDownloadFeed: true,
+        quickDownloadStory: true,
+        inactiveThresholdDays: 180
+    };
+
+    function loadPrefs() {
+        try {
+            const raw = localStorage.getItem('maxpland_prefs');
+            if (raw) return { ...DEFAULT_PREFS, ...JSON.parse(raw) };
+        } catch (_) {}
+        return { ...DEFAULT_PREFS };
+    }
+
+    function savePrefs(prefs) {
+        try {
+            localStorage.setItem('maxpland_prefs', JSON.stringify(prefs));
+        } catch (_) {}
+    }
 
     const STATE = {
         currentUser: { id: null, username: null },
@@ -1090,6 +1262,9 @@
         mutual: [],
         lostFollowers: [],
         ghostFollowers: [],
+        inactiveFollowing: [],
+        isScanningInactive: false,
+        stopInactiveScanFlag: false,
         whitelist: new Map(),
         selectedIds: new Set(),
         isScanning: false,
@@ -1106,8 +1281,118 @@
             excludeNoAvatar: false,
             excludeWhitelist: false
         },
-        scanStartTime: 0
+        scanStartTime: 0,
+        prefs: loadPrefs()
     };
+
+    // STEALTH STORY SEEN INTERCEPTOR (Ponytail: Stealth Minimal & Native Masked)
+    function installStorySeenInterceptor() {
+        try {
+            const win = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
+            const hookSym = Symbol.for('mp_seen_hooked');
+            if (win[hookSym]) return;
+            win[hookSym] = true;
+
+            if (typeof win.fetch === 'function') {
+                const rawFetch = win.fetch;
+                const stealthFetch = function(...args) {
+                    const url = typeof args[0] === 'string' ? args[0] : (args[0]?.url || '');
+                    if (STATE.prefs?.stealthStory && (url.includes('/stories/reel/seen') || url.includes('/api/v1/stories/reel/seen'))) {
+                        return Promise.resolve(new Response(JSON.stringify({ status: 'ok' }), {
+                            status: 200,
+                            headers: { 'Content-Type': 'application/json' }
+                        }));
+                    }
+                    return rawFetch.apply(this, args);
+                };
+
+                // ponytail: mask stealthFetch as native code to evade falco/bd.js bot detectors
+                try {
+                    Object.defineProperty(stealthFetch, 'name', { value: rawFetch.name || 'fetch' });
+                    Object.defineProperty(stealthFetch, 'length', { value: rawFetch.length || 1 });
+                    const origToString = Function.prototype.toString;
+                    stealthFetch.toString = function() {
+                        return this === stealthFetch ? origToString.call(rawFetch) : origToString.call(this);
+                    };
+                } catch (_) {}
+
+                win.fetch = stealthFetch;
+            }
+        } catch (_) {}
+    }
+    installStorySeenInterceptor();
+
+    // CLEAN FEED MODE CONTROLLER
+    let cleanFeedObserver = null;
+    function applyCleanFeedMode() {
+        const isEnabled = Boolean(STATE.prefs?.cleanFeed);
+        let styleTag = document.getElementById('maxpland-clean-feed-style');
+
+        if (!isEnabled) {
+            if (styleTag) styleTag.remove();
+            if (cleanFeedObserver) {
+                cleanFeedObserver.disconnect();
+                cleanFeedObserver = null;
+            }
+            document.querySelectorAll('article[data-mp-hidden-ad="true"]').forEach(el => {
+                delete el.dataset.mpHiddenAd;
+            });
+            return;
+        }
+
+        if (!styleTag) {
+            styleTag = document.createElement('style');
+            styleTag.id = 'maxpland-clean-feed-style';
+            // ponytail: avoid display:none layout collapse which causes browser scroll-anchor to jump to top (0, 0)
+            styleTag.textContent = `
+                article:has(a[href*="/ads/ig_redirect/"]),
+                article:has(a[href*="/ads/about/"]),
+                article:has(a[href*="facebook.com/ads/"]),
+                article[data-mp-hidden-ad="true"] {
+                    visibility: hidden !important;
+                    height: 0 !important;
+                    min-height: 0 !important;
+                    max-height: 0 !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    border: none !important;
+                    overflow: hidden !important;
+                    overflow-anchor: none !important;
+                    pointer-events: none !important;
+                    opacity: 0 !important;
+                }
+            `;
+            (document.head || document.documentElement).appendChild(styleTag);
+        }
+
+        const scanArticles = () => {
+            if (!STATE.prefs?.cleanFeed) return;
+            const AD_KEYWORDS = ['sponsored', 'ได้รับการสนับสนุน', 'suggested for you', 'แนะนำสำหรับคุณ'];
+            const articles = document.querySelectorAll('article:not([data-mp-hidden-ad])');
+            for (const article of articles) {
+                const header = article.querySelector('header');
+                const text = (header ? header.textContent : (article.textContent || '').slice(0, 300)).toLowerCase();
+                const isAd = AD_KEYWORDS.some(kw => text.includes(kw));
+                if (isAd) {
+                    article.dataset.mpHiddenAd = 'true';
+                }
+            }
+        };
+
+        scanArticles();
+
+        if (!cleanFeedObserver) {
+            let debounceTimer = null;
+            cleanFeedObserver = new MutationObserver(() => {
+                if (debounceTimer) return;
+                debounceTimer = setTimeout(() => {
+                    debounceTimer = null;
+                    scanArticles();
+                }, 150);
+            });
+            cleanFeedObserver.observe(document.body || document.documentElement, { childList: true, subtree: true });
+        }
+    }
 
     /* ==========================================================================
        5. UI BUILDER (Mini Draggable Circle & Clean Precision Modal)
@@ -1164,17 +1449,20 @@
                 <button class="maxpland-close-btn" id="maxpland-close-btn" aria-label="Close MaxPland">${ICONS.CLOSE}</button>
             </div>
 
-            <nav class="maxpland-tabs" role="tablist" aria-label="MaxPland Tools">
-                <button class="maxpland-tab-btn active" data-tab="relationship">${ICONS.USERS} Followers & Unfollow</button>
-                <button class="maxpland-tab-btn" data-tab="vault">${ICONS.DOWNLOAD} Media Downloader</button>
+            <nav class="maxpland-tabs" role="tablist" aria-label="MaxPland Navigation">
+                <button class="maxpland-tab-btn active" data-tab="relationship">${ICONS.USERS} Relationships</button>
+                <button class="maxpland-tab-btn" data-tab="health">${ICONS.ANALYTICS} Account Health</button>
+                <button class="maxpland-tab-btn" data-tab="features">${ICONS.FEATURES} Features</button>
+                <button class="maxpland-tab-btn" data-tab="settings">${ICONS.SETTINGS} Settings</button>
+                <button class="maxpland-tab-btn" data-tab="vault">${ICONS.DOWNLOAD} Media Vault</button>
             </nav>
 
             <div class="maxpland-progress-container" id="maxpland-global-progress">
                 <div class="maxpland-scan-row">
                     <span class="maxpland-scan-phase" id="maxpland-scan-phase">[1/2] Preparing scan...</span>
                     <div class="maxpland-scan-meta">
-                        <span id="maxpland-scan-stat-count">Accounts: 0</span>
-                        <span id="maxpland-scan-stat-page">Page: 0</span>
+                        <span id="maxpland-scan-stat-count">Users: 0</span>
+                        <span id="maxpland-scan-stat-page">Pages: 0</span>
                         <span id="maxpland-scan-stat-timer">⏱️ 00:00</span>
                         <button type="button" class="maxpland-btn-danger" id="maxpland-btn-stop-scan">${ICONS.STOP} Stop</button>
                     </div>
@@ -1193,27 +1481,27 @@
                         <div class="maxpland-stat-card card-not-following" data-target-filter="not_following_back">
                             <span class="maxpland-stat-label">Not Following Back</span>
                             <span class="maxpland-stat-value" id="stat-not-following-back">-</span>
-                            <span class="maxpland-stat-hint">You follow them, but they don't follow you</span>
+                            <span class="maxpland-stat-hint">You follow them, they don't</span>
                         </div>
                         <div class="maxpland-stat-card card-fans" data-target-filter="fans">
                             <span class="maxpland-stat-label">Fans</span>
                             <span class="maxpland-stat-value" id="stat-fans">-</span>
-                            <span class="maxpland-stat-hint">They follow you, but you don't follow them</span>
+                            <span class="maxpland-stat-hint">They follow you, you don't</span>
                         </div>
                         <div class="maxpland-stat-card card-mutual" data-target-filter="mutual">
-                            <span class="maxpland-stat-label">Mutual Following</span>
+                            <span class="maxpland-stat-label">Mutuals</span>
                             <span class="maxpland-stat-value" id="stat-mutual">-</span>
-                            <span class="maxpland-stat-hint">Both follow each other</span>
+                            <span class="maxpland-stat-hint">Follow each other</span>
                         </div>
                         <div class="maxpland-stat-card card-lost" data-target-filter="lost">
-                            <span class="maxpland-stat-label">Lost Followers</span>
+                            <span class="maxpland-stat-label">Recently Lost</span>
                             <span class="maxpland-stat-value" id="stat-lost">-</span>
-                            <span class="maxpland-stat-hint">Unfollowed since previous scan</span>
+                            <span class="maxpland-stat-hint">Unfollowed since last scan</span>
                         </div>
                         <div class="maxpland-stat-card card-ghost" data-target-filter="ghost">
                             <span class="maxpland-stat-label">👻 Ghost Accounts</span>
                             <span class="maxpland-stat-value" id="stat-ghost">-</span>
-                            <span class="maxpland-stat-hint">No avatar / inactive bot accounts</span>
+                            <span class="maxpland-stat-hint">No avatar / inactive bot</span>
                         </div>
                     </div>
 
@@ -1230,10 +1518,13 @@
                                 Mutual <span class="maxpland-pill-count" id="pill-count-mutual">-</span>
                             </button>
                             <button class="maxpland-pill-btn" data-filter="lost">
-                                Lost <span class="maxpland-pill-count" id="pill-count-lost">-</span>
+                                Recently Lost <span class="maxpland-pill-count" id="pill-count-lost">-</span>
                             </button>
                             <button class="maxpland-pill-btn" data-filter="ghost">
                                 👻 Ghost <span class="maxpland-pill-count" id="pill-count-ghost">-</span>
+                            </button>
+                            <button class="maxpland-pill-btn" data-filter="inactive">
+                                ⏱️ Inactive <span class="maxpland-pill-count" id="pill-count-inactive">-</span>
                             </button>
                             <button class="maxpland-pill-btn" data-filter="whitelist">
                                 ⭐ Whitelist <span class="maxpland-pill-count" id="pill-count-white">-</span>
@@ -1241,28 +1532,28 @@
                         </div>
                         <div class="maxpland-search-box">
                             ${ICONS.SEARCH}
-                            <input type="text" placeholder="Search username or name..." id="maxpland-user-search">
+                            <input type="text" placeholder="Search username or full name..." id="maxpland-user-search">
                         </div>
                     </div>
 
                     <!-- Sub-filters & Quick Toggles -->
                     <div class="maxpland-subfilters">
                         <span style="font-weight:600;color:var(--mp-text-muted);">Filters:</span>
-                        <div class="maxpland-chip-toggle" id="toggle-filter-whitelist" title="Hide accounts in Whitelist">
+                        <div class="maxpland-chip-toggle" id="toggle-filter-whitelist" title="Hide starred whitelist accounts">
                             ${ICONS.STAR} Hide Whitelist
                         </div>
-                        <div class="maxpland-chip-toggle" id="toggle-filter-verified" title="Hide verified accounts">
+                        <div class="maxpland-chip-toggle" id="toggle-filter-verified" title="Hide verified badge accounts">
                             ${ICONS.VERIFIED} Hide Verified
                         </div>
                         <div class="maxpland-chip-toggle" id="toggle-filter-private" title="Hide private accounts">
                             ${ICONS.LOCK} Hide Private
                         </div>
-                        <div class="maxpland-chip-toggle" id="toggle-filter-noavatar" title="Hide accounts with no profile picture">
+                        <div class="maxpland-chip-toggle" id="toggle-filter-noavatar" title="Hide accounts without avatar">
                             Hide No-Avatar
                         </div>
                         <div style="margin-left:auto;display:flex;gap:6px;">
-                            <button class="maxpland-btn-secondary" id="maxpland-btn-copy-usernames" style="padding:4px 9px;font-size:11.5px;" title="Copy all displayed usernames">
-                                ${ICONS.COPY} Copy Names
+                            <button class="maxpland-btn-secondary" id="maxpland-btn-copy-usernames" style="padding:4px 9px;font-size:11.5px;" title="Copy all visible usernames to clipboard">
+                                ${ICONS.COPY} Copy Usernames
                             </button>
                             <button class="maxpland-btn-secondary" id="maxpland-btn-export-csv" style="padding:4px 9px;font-size:11.5px;">
                                 ${ICONS.DOWNLOAD} CSV
@@ -1277,13 +1568,16 @@
                     <div class="maxpland-toolbar" style="margin-bottom:10px;">
                         <div style="display:flex;gap:8px;align-items:center;">
                             <button class="maxpland-btn-primary" id="maxpland-btn-scan-relationships">
-                                ${ICONS.USERS} Start Scan
+                                ${ICONS.USERS} Scan Relationships
+                            </button>
+                            <button class="maxpland-btn-secondary" id="maxpland-btn-scan-inactive" title="Scan Following accounts for inactivity beyond threshold" style="padding:6px 10px;font-size:12px;">
+                                ${ICONS.CLOCK} Inactive Radar
                             </button>
                             <div style="display:flex;gap:6px;" id="maxpland-whitelist-tools">
-                                <button class="maxpland-btn-secondary" id="maxpland-btn-backup-whitelist" title="Export Whitelist backup as JSON" style="padding:6px 10px;font-size:12px;">
+                                <button class="maxpland-btn-secondary" id="maxpland-btn-backup-whitelist" title="Export starred accounts whitelist as JSON file" style="padding:6px 10px;font-size:12px;">
                                     ${ICONS.BACKUP} Backup Whitelist
                                 </button>
-                                <button class="maxpland-btn-secondary" id="maxpland-btn-restore-whitelist" title="Import Whitelist from JSON backup" style="padding:6px 10px;font-size:12px;">
+                                <button class="maxpland-btn-secondary" id="maxpland-btn-restore-whitelist" title="Import starred accounts from backup JSON file" style="padding:6px 10px;font-size:12px;">
                                     ${ICONS.RESTORE} Restore Whitelist
                                 </button>
                                 <input type="file" id="maxpland-whitelist-file-input" accept=".json" style="display:none;">
@@ -1295,9 +1589,9 @@
                     <!-- Floating Bulk Action Bar (Visible when users selected) -->
                     <div class="maxpland-bulk-bar" id="maxpland-bulk-bar">
                         <div class="maxpland-bulk-info">
-                            <span id="maxpland-bulk-count-label">0 selected</span>
-                            <button type="button" class="maxpland-btn-secondary" id="maxpland-btn-select-all" style="padding:3px 8px;font-size:11px;">Select All on Page</button>
-                            <button type="button" class="maxpland-btn-secondary" id="maxpland-btn-deselect-all" style="padding:3px 8px;font-size:11px;">Deselect All</button>
+                            <span id="maxpland-bulk-count-label">0 accounts selected</span>
+                            <button type="button" class="maxpland-btn-secondary" id="maxpland-btn-select-all" style="padding:3px 8px;font-size:11px;">Select page</button>
+                            <button type="button" class="maxpland-btn-secondary" id="maxpland-btn-deselect-all" style="padding:3px 8px;font-size:11px;">Deselect all</button>
                         </div>
                         <div class="maxpland-bulk-actions">
                             <button type="button" class="maxpland-btn-danger" id="maxpland-btn-batch-unfollow">
@@ -1309,16 +1603,200 @@
                     <!-- User List -->
                     <div class="maxpland-user-list" id="maxpland-relationship-list">
                         <div style="padding: 48px; text-align: center; color: var(--mp-text-muted);">
-                            Click <b>"Start Scan"</b> to analyze your Followers & Following.
+                            Click <b>"Scan Relationships"</b> to compare your Following & Followers.
                         </div>
                     </div>
                 </div>
 
-                <!-- TAB 2: Media Vault -->
+                <!-- TAB 2: Account Health Dashboard -->
+                <div class="maxpland-tab-content" id="tab-health">
+                    <div style="margin-bottom:14px;">
+                        <h2 style="font-size:15px;font-weight:700;margin:0 0 4px;">Account Health & Relationship Analytics</h2>
+                        <p style="font-size:12px;color:var(--mp-text-muted);margin:0;">Computed from local snapshot database with zero network overhead.</p>
+                    </div>
+
+                    <div class="maxpland-health-hero">
+                        <div class="maxpland-health-card">
+                            <div class="maxpland-health-title">Follower Ratio</div>
+                            <div class="maxpland-health-val" id="health-ratio-val">-</div>
+                            <div id="health-ratio-badge" class="maxpland-health-badge" style="background:var(--mp-cyan-bg);color:var(--mp-cyan);">Awaiting scan</div>
+                        </div>
+                        <div class="maxpland-health-card">
+                            <div class="maxpland-health-title">Mutual Rate</div>
+                            <div class="maxpland-health-val" id="health-mutual-val">-</div>
+                            <div id="health-mutual-badge" class="maxpland-health-badge" style="background:var(--mp-emerald-bg);color:var(--mp-emerald);">Reciprocal follow rate</div>
+                        </div>
+                        <div class="maxpland-health-card">
+                            <div class="maxpland-health-title">Not Following Back</div>
+                            <div class="maxpland-health-val" id="health-notback-val">-</div>
+                            <div id="health-notback-badge" class="maxpland-health-badge" style="background:var(--mp-rose-bg);color:var(--mp-rose);">Unrequited follows</div>
+                        </div>
+                        <div class="maxpland-health-card">
+                            <div class="maxpland-health-title">Ghost & Inactive Impact</div>
+                            <div class="maxpland-health-val" id="health-ghost-val">-</div>
+                            <div id="health-ghost-badge" class="maxpland-health-badge" style="background:var(--mp-amber-bg);color:var(--mp-amber);">No avatar / ghost</div>
+                        </div>
+                    </div>
+
+                    <!-- Historical Sparkline Chart -->
+                    <div class="maxpland-chart-box">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                            <div>
+                                <span style="font-size:13px;font-weight:700;">📈 Follower Count Trend (Historical Snapshots)</span>
+                                <div style="font-size:11.5px;color:var(--mp-text-muted);">Archived locally in IndexedDB after each scan</div>
+                            </div>
+                            <span id="health-drift-delta" style="font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;"></span>
+                        </div>
+                        <div id="health-chart-container" style="min-height:130px;display:grid;place-items:center;color:var(--mp-text-muted);font-size:12px;">
+                            Run at least 1 relationship scan to begin plotting history trend.
+                        </div>
+                    </div>
+
+                    <!-- Health Advice Box -->
+                    <div style="background:var(--mp-bg-card);border:1px solid var(--mp-border-card);border-radius:8px;padding:14px 16px;">
+                        <span style="font-size:13px;font-weight:700;color:#38bdf8;">💡 Strategic Account Health Advice:</span>
+                        <div id="health-advice-text" style="font-size:12px;color:var(--mp-text-secondary);margin-top:6px;line-height:1.5;">
+                            Run a relationship scan in the first tab to receive tailored account structure insights.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 3: Features Control Panel (Switches) -->
+                <div class="maxpland-tab-content" id="tab-features">
+                    <div style="margin-bottom:16px;">
+                        <h2 style="font-size:15px;font-weight:700;margin:0 0 4px;">Feature Controller & Master Toggles</h2>
+                        <p style="font-size:12px;color:var(--mp-text-muted);margin:0;">Enable or disable capabilities on demand with instant persistence.</p>
+                    </div>
+
+                    <div class="maxpland-feature-card">
+                        <div class="maxpland-feature-info">
+                            <div class="maxpland-feature-title">
+                                ${ICONS.EYE} Stealth Story Viewer (Anonymous)
+                                <span class="maxpland-badge-emerald">Recommended</span>
+                            </div>
+                            <div class="maxpland-feature-desc">
+                                Blocks seen telemetry beacons to Instagram servers 100%. View any story completely anonymously without appearing on the viewer list.
+                            </div>
+                        </div>
+                        <label class="maxpland-switch" title="Toggle Stealth Story Viewer">
+                            <input type="checkbox" id="pref-switch-stealth-story">
+                            <span class="maxpland-slider"></span>
+                        </label>
+                    </div>
+
+                    <div class="maxpland-feature-card">
+                        <div class="maxpland-feature-info">
+                            <div class="maxpland-feature-title">
+                                ${ICONS.SHIELD} Clean Feed Mode (Ad & Suggestion Blocker)
+                            </div>
+                            <div class="maxpland-feature-desc">
+                                Automatically hides sponsored ads and suggested posts from your home feed so you only see content from accounts you actually follow.
+                            </div>
+                        </div>
+                        <label class="maxpland-switch" title="Toggle Clean Feed Mode">
+                            <input type="checkbox" id="pref-switch-clean-feed">
+                            <span class="maxpland-slider"></span>
+                        </label>
+                    </div>
+
+                    <div class="maxpland-feature-card">
+                        <div class="maxpland-feature-info">
+                            <div class="maxpland-feature-title">
+                                ${ICONS.DOWNLOAD} In-Feed Media Download Buttons
+                            </div>
+                            <div class="maxpland-feature-desc">
+                                Displays direct full-resolution download buttons next to the bookmark icon on every feed post.
+                            </div>
+                        </div>
+                        <label class="maxpland-switch" title="Toggle In-Feed Download Buttons">
+                            <input type="checkbox" id="pref-switch-feed-download">
+                            <span class="maxpland-slider"></span>
+                        </label>
+                    </div>
+
+                    <div class="maxpland-feature-card">
+                        <div class="maxpland-feature-info">
+                            <div class="maxpland-feature-title">
+                                ${ICONS.THUMBNAIL} Story Toolbar & Downloader
+                            </div>
+                            <div class="maxpland-feature-desc">
+                                Floating utility toolbar in the top-right corner of story views for instant video, cover photo downloads, and stealth toggle.
+                            </div>
+                        </div>
+                        <label class="maxpland-switch" title="Toggle Story Toolbar">
+                            <input type="checkbox" id="pref-switch-story-toolbar">
+                            <span class="maxpland-slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- TAB 4: Settings & Configuration -->
+                <div class="maxpland-tab-content" id="tab-settings">
+                    <div style="margin-bottom:16px;">
+                        <h2 style="font-size:15px;font-weight:700;margin:0 0 4px;">Settings & Safety Configuration</h2>
+                        <p style="font-size:12px;color:var(--mp-text-muted);margin:0;">Configure detection thresholds, safety delay parameters, and backups.</p>
+                    </div>
+
+                    <div class="maxpland-settings-group">
+                        <h3 class="maxpland-settings-group-title">${ICONS.CLOCK} Inactive Following Radar Threshold</h3>
+                        <div class="maxpland-settings-row">
+                            <div>
+                                <div style="font-weight:600;font-size:13px;">Inactivity Duration Threshold</div>
+                                <div style="font-size:11.5px;color:var(--mp-text-muted);">Calculated from the timestamp of each user's latest feed post</div>
+                            </div>
+                            <select id="pref-setting-inactive-threshold" class="maxpland-select">
+                                <option value="90">90 Days (3 Months)</option>
+                                <option value="180">180 Days (6 Months - Recommended)</option>
+                                <option value="365">365 Days (1 Year)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="maxpland-settings-group">
+                        <h3 class="maxpland-settings-group-title">🛡️ Anti-Detection Guard & Pacing</h3>
+                        <div class="maxpland-settings-row">
+                            <div>
+                                <div style="font-weight:600;font-size:13px;">Unfollow Jitter Delay</div>
+                                <div style="font-size:11.5px;color:var(--mp-text-muted);">Randomized pacing interval between unfollow actions to emulate natural human behavior and prevent rate limits.</div>
+                            </div>
+                            <span style="font-size:12px;font-weight:600;color:var(--mp-emerald);">3,000 - 5,000 ms (Randomized)</span>
+                        </div>
+                        <div class="maxpland-settings-row">
+                            <div>
+                                <div style="font-weight:600;font-size:13px;">Following / Followers Page Limit</div>
+                                <div style="font-size:11.5px;color:var(--mp-text-muted);">Safety ceiling per scan session to prevent session throttling.</div>
+                            </div>
+                            <span style="font-size:12px;font-weight:600;color:var(--mp-blue);">60 pages (3,000 users) / 250 pages (12,500 users)</span>
+                        </div>
+                    </div>
+
+                    <div class="maxpland-settings-group">
+                        <h3 class="maxpland-settings-group-title">💾 Data Vault & Cache Management</h3>
+                        <div class="maxpland-settings-row">
+                            <div>
+                                <div style="font-weight:600;font-size:13px;">Backup & Restore Starred Whitelist</div>
+                                <div style="font-size:11.5px;color:var(--mp-text-muted);">Export or import protected accounts whitelist as JSON file.</div>
+                            </div>
+                            <div style="display:flex;gap:6px;">
+                                <button type="button" class="maxpland-btn-secondary" id="setting-btn-backup-whitelist" style="padding:5px 10px;font-size:12px;">${ICONS.BACKUP} Backup Whitelist</button>
+                                <button type="button" class="maxpland-btn-secondary" id="setting-btn-restore-whitelist" style="padding:5px 10px;font-size:12px;">${ICONS.RESTORE} Restore Whitelist</button>
+                            </div>
+                        </div>
+                        <div class="maxpland-settings-row">
+                            <div>
+                                <div style="font-weight:600;font-size:13px;">Activity Radar Cache</div>
+                                <div style="font-size:11.5px;color:var(--mp-text-muted);">Purge stored last-post timestamps from IndexedDB to force fresh scanning.</div>
+                            </div>
+                            <button type="button" class="maxpland-btn-danger" id="setting-btn-clear-cache" style="padding:5px 10px;font-size:12px;">Purge Radar Cache</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 5: Media Vault -->
                 <div class="maxpland-tab-content" id="tab-vault">
                     <div style="margin-bottom:12px;">
-                        <h2 style="font-size:15px;font-weight:700;margin:0 0 4px;">Media Vault & Batch Downloader</h2>
-                        <p style="font-size:12px;color:var(--mp-text-muted);margin:0;">Paste post or Reel links to download original HD media, or inspect your download history.</p>
+                        <h2 style="font-size:15px;font-weight:700;margin:0 0 4px;">Direct Media Downloader & Vault</h2>
+                        <p style="font-size:12px;color:var(--mp-text-muted);margin:0;">Paste post or Reel links to download full-resolution assets or browse historical vault.</p>
                     </div>
 
                     <textarea id="maxpland-media-queue-input" placeholder="Paste post or Reel URLs (one per line):&#10;https://www.instagram.com/p/ABC123xyz/&#10;https://www.instagram.com/reel/XYZ789abc/" style="width:100%;min-height:100px;resize:vertical;background:var(--mp-bg-panel);border:1px solid var(--mp-border-card);color:var(--mp-text-primary);border-radius:6px;padding:10px;font-family:ui-monospace,monospace;font-size:12px;"></textarea>
@@ -1381,13 +1859,17 @@
                 badge.textContent = `UID: ${user.id}`;
                 STATE.currentUser = user;
             } else {
-                badge.textContent = 'No account found (Please log in to IG)';
+                badge.textContent = 'Account not found (Log in)';
             }
+
+            syncFeaturesTab();
+            syncSettingsTab();
+            if (STATE.activeTab === 'health') renderHealthDashboard();
         };
 
         const closeModal = () => {
             if (STATE.isScanning || STATE.isUnfollowing) {
-                if (!confirm('A process is currently running. Are you sure you want to close?')) return;
+                if (!confirm('A task is currently in progress. Do you want to close?')) return;
             }
             overlay.style.display = 'none';
             modal.style.display = 'none';
@@ -1478,6 +1960,9 @@
                 if (target) target.classList.add('active');
                 STATE.activeTab = tab.dataset.tab;
                 if (tab.dataset.tab === 'vault') renderMediaVault();
+                if (tab.dataset.tab === 'health') renderHealthDashboard();
+                if (tab.dataset.tab === 'features') syncFeaturesTab();
+                if (tab.dataset.tab === 'settings') syncSettingsTab();
             });
         });
 
@@ -1544,7 +2029,7 @@
             STATE.stopScanFlag = true;
             STATE.scanController?.abort();
             STATE.stopUnfollowFlag = true;
-            document.getElementById('maxpland-scan-phase').textContent = 'Stopping operation...';
+            document.getElementById('maxpland-scan-phase').textContent = 'Stopping scan as requested...';
         });
 
         // Whitelist Backup & Restore
@@ -1571,6 +2056,145 @@
         document.getElementById('maxpland-btn-run-media-queue').addEventListener('click', () => runMediaQueue({ skipExisting: true }));
         document.getElementById('maxpland-btn-run-media-all').addEventListener('click', () => runMediaQueue({ skipExisting: false }));
         document.getElementById('maxpland-btn-refresh-vault').addEventListener('click', renderMediaVault);
+
+        // Feature Switches (Master Toggles)
+        const swStealth = document.getElementById('pref-switch-stealth-story');
+        if (swStealth) {
+            swStealth.addEventListener('change', (e) => {
+                STATE.prefs.stealthStory = e.target.checked;
+                savePrefs(STATE.prefs);
+                showToast(e.target.checked ? 'Stealth Story Viewer enabled (Seen blocked)' : 'Stealth Story Viewer disabled');
+            });
+        }
+        const swCleanFeed = document.getElementById('pref-switch-clean-feed');
+        if (swCleanFeed) {
+            swCleanFeed.addEventListener('change', (e) => {
+                STATE.prefs.cleanFeed = e.target.checked;
+                savePrefs(STATE.prefs);
+                applyCleanFeedMode();
+                showToast(e.target.checked ? 'Clean Feed Mode enabled (Ads hidden)' : 'Clean Feed Mode disabled');
+            });
+        }
+        const swFeedDl = document.getElementById('pref-switch-feed-download');
+        if (swFeedDl) {
+            swFeedDl.addEventListener('change', (e) => {
+                STATE.prefs.quickDownloadFeed = e.target.checked;
+                savePrefs(STATE.prefs);
+                showToast(e.target.checked ? 'In-feed download buttons enabled' : 'In-feed download buttons disabled');
+            });
+        }
+        const swStoryTb = document.getElementById('pref-switch-story-toolbar');
+        if (swStoryTb) {
+            swStoryTb.addEventListener('change', (e) => {
+                STATE.prefs.quickDownloadStory = e.target.checked;
+                savePrefs(STATE.prefs);
+                if (!e.target.checked) {
+                    const bar = document.getElementById('maxpland-story-bar');
+                    if (bar) bar.remove();
+                }
+                showToast(e.target.checked ? 'Story toolbar enabled' : 'Story toolbar disabled');
+            });
+        }
+
+        // Settings Threshold & Actions
+        const selInactive = document.getElementById('pref-setting-inactive-threshold');
+        if (selInactive) {
+            selInactive.addEventListener('change', (e) => {
+                STATE.prefs.inactiveThresholdDays = Number(e.target.value);
+                savePrefs(STATE.prefs);
+                showToast(`Inactive threshold updated to ${e.target.value} days`);
+            });
+        }
+        const btnSettingBackup = document.getElementById('setting-btn-backup-whitelist');
+        if (btnSettingBackup) btnSettingBackup.addEventListener('click', exportWhitelistBackup);
+        const btnSettingRestore = document.getElementById('setting-btn-restore-whitelist');
+        if (btnSettingRestore) btnSettingRestore.addEventListener('click', () => restoreInput.click());
+        const btnClearCache = document.getElementById('setting-btn-clear-cache');
+        if (btnClearCache) {
+            btnClearCache.addEventListener('click', async () => {
+                if (confirm('Do you want to purge all cached account activity timestamps?')) {
+                    await MaxPlandVault.clearActivityCache();
+                    STATE.inactiveFollowing = [];
+                    const countEl = document.getElementById('pill-count-inactive');
+                    if (countEl) countEl.textContent = '-';
+                    showToast('Activity radar cache purged successfully');
+                }
+            });
+        }
+
+        // Inactive Radar Scan Trigger
+        const btnScanInactive = document.getElementById('maxpland-btn-scan-inactive');
+        if (btnScanInactive) btnScanInactive.addEventListener('click', runInactiveScan);
+
+        // ponytail: Native Event Delegation for Relationship List (Zero Memory Leaks & 60fps Search)
+        const relList = document.getElementById('maxpland-relationship-list');
+        if (relList) {
+            relList.addEventListener('change', (e) => {
+                const box = e.target.closest('.user-select-checkbox');
+                if (!box) return;
+                const uid = box.dataset.id;
+                if (box.checked) STATE.selectedIds.add(uid);
+                else STATE.selectedIds.delete(uid);
+                updateBulkActionBar();
+            });
+
+            relList.addEventListener('click', async (e) => {
+                // 1. Star Toggle
+                const star = e.target.closest('.maxpland-star-btn');
+                if (star && !star.disabled) {
+                    const uid = star.dataset.id;
+                    const pool = getFilteredUsers();
+                    const user = pool.find(u => String(u.id || u.pk || u.pk_id) === uid) || STATE.whitelist.get(uid);
+                    if (user) {
+                        star.disabled = true;
+                        try {
+                            const added = await MaxPlandVault.toggleWhitelist(user);
+                            STATE.whitelist = await MaxPlandVault.getWhitelist();
+                            const whiteCountEl = document.getElementById('pill-count-white');
+                            if (whiteCountEl) whiteCountEl.textContent = STATE.whitelist.size.toLocaleString();
+                            if (added) STATE.selectedIds.delete(uid);
+                            showToast(added ? `Added @${user.username} to Whitelist` : `Removed @${user.username} from Whitelist`);
+                            updateBulkActionBar();
+                            renderRelationshipList();
+                        } catch (err) { alert(err.message || String(err)); }
+                        finally { star.disabled = false; }
+                    }
+                    return;
+                }
+
+                // 2. Single Unfollow
+                const btn = e.target.closest('.maxpland-row-unfollow-btn');
+                if (btn && !btn.disabled) {
+                    if (STATE.isScanning || STATE.isUnfollowing || STATE.scanIncomplete) return;
+                    const uid = btn.dataset.id;
+                    const uname = btn.dataset.user;
+                    if (!confirm(`Are you sure you want to unfollow @${uname}?`)) return;
+
+                    STATE.isUnfollowing = true;
+                    btn.disabled = true;
+                    btn.textContent = 'Unfollowing...';
+                    try {
+                        await IgBridge.unfollowUser(uid);
+                        showToast(`Unfollowed @${uname} successfully`);
+                        applyUnfollowResult(uid, uname);
+                        STATE.selectedIds.delete(uid);
+                        const notBackEl = document.getElementById('stat-not-following-back');
+                        if (notBackEl) notBackEl.textContent = STATE.notFollowingBack.length.toLocaleString();
+                        const pillNotEl = document.getElementById('pill-count-not');
+                        if (pillNotEl) pillNotEl.textContent = STATE.notFollowingBack.length.toLocaleString();
+                        updateBulkActionBar();
+                        renderRelationshipList();
+                    } catch (err) {
+                        alert(`Unfollow failed: ${err.message || err}`);
+                        btn.disabled = false;
+                        btn.innerHTML = `${ICONS.UNFOLLOW} Unfollow`;
+                    } finally {
+                        STATE.isUnfollowing = false;
+                    }
+                    return;
+                }
+            });
+        }
     }
 
     function sleep(ms) {
@@ -1709,8 +2333,8 @@
             notice.style.display = 'none';
             summary.textContent = '';
             el('maxpland-progress-fill').style.width = '0%';
-            el('maxpland-scan-stat-count').textContent = 'Accounts: 0';
-            el('maxpland-scan-stat-page').textContent = 'Page: 0';
+            el('maxpland-scan-stat-count').textContent = 'Users: 0';
+            el('maxpland-scan-stat-page').textContent = 'Pages: 0';
             el('maxpland-scan-stat-timer').textContent = '⏱️ 00:00';
             const currentUser = await IgBridge.resolveCurrentUser();
             IgBridge.assertAccount(currentUser.id);
@@ -1719,18 +2343,18 @@
             el('maxpland-account-badge').textContent = currentUser.username ? `@${currentUser.username}` : `UID: ${currentUser.id}`;
             const lists = {};
             for (const [index, endpoint] of ['followers', 'following'].entries()) {
-                if (STATE.stopScanFlag) throw new DOMException('Scan stopped by user', 'AbortError');
+                if (STATE.stopScanFlag) throw new DOMException('Scan aborted by user', 'AbortError');
                 phase.textContent = `[${index + 1}/2] Fetching ${endpoint === 'followers' ? 'Followers' : 'Following'}...`;
                 const result = await IgBridge.fetchAllRelationships(endpoint, currentUser.id,
                     endpoint === 'followers' ? APP_CONFIG.FOLLOWERS_PAGE_SAFETY_LIMIT : APP_CONFIG.FOLLOWING_PAGE_SAFETY_LIMIT,
                     (count, page, message) => {
                         el('maxpland-scan-stat-count').textContent = `${endpoint}: ${count.toLocaleString()}`;
-                        el('maxpland-scan-stat-page').textContent = `Page: ${page}`;
+                        el('maxpland-scan-stat-page').textContent = `Pages: ${page}`;
                         el('maxpland-progress-fill').style.width = `${index * 50 + Math.min(45, page * 3)}%`;
                         if (message) { notice.textContent = message; notice.style.display = 'block'; }
                     });
-                if (STATE.stopScanFlag) throw new DOMException('Scan stopped by user', 'AbortError');
-                if (!result.completed) throw result.lastError || new Error(`Incomplete ${endpoint} fetch`);
+                if (STATE.stopScanFlag) throw new DOMException('Scan aborted by user', 'AbortError');
+                if (!result.completed) throw result.lastError || new Error(`Incomplete fetch for ${endpoint}`);
                 lists[endpoint] = result;
             }
             const { followers, following } = lists;
@@ -1772,13 +2396,13 @@
             const prev = await MaxPlandVault.getLatestSnapshot(currentUser.id);
             const whitelist = await MaxPlandVault.getWhitelist();
             IgBridge.assertAccount(currentUser.id);
-            if (STATE.stopScanFlag) throw new DOMException('Scan stopped by user', 'AbortError');
+            if (STATE.stopScanFlag) throw new DOMException('Scan aborted by user', 'AbortError');
             const lostFollowers = (prev?.follower_ids || []).filter(id => !followerIdSet.has(String(id))).map(id => ({
-                pk: String(id), id: String(id), username: `user_${id}`, full_name: 'Unfollowed since last scan', profile_pic_url: ''
+                pk: String(id), id: String(id), username: `user_${id}`, full_name: 'Unfollowed since previous scan', profile_pic_url: ''
             }));
             await MaxPlandVault.saveSnapshot(followers, following, currentUser.id, STATE.scanController.signal);
             IgBridge.assertAccount(currentUser.id);
-            if (STATE.stopScanFlag) throw new DOMException('Scan stopped by user', 'AbortError');
+            if (STATE.stopScanFlag) throw new DOMException('Scan aborted by user', 'AbortError');
             Object.assign(STATE, { followers, following, whitelist, lostFollowers, scanIncomplete: false,
                 notFollowingBack: following.filter(u => !isFollower(u)),
                 fans: followers.filter(u => !isFollowing(u)),
@@ -1790,13 +2414,13 @@
             }
             el('pill-count-white').textContent = whitelist.size.toLocaleString();
             el('maxpland-progress-fill').style.width = '100%';
-            phase.textContent = 'Scan complete';
+            phase.textContent = 'Scan completed';
             notice.style.display = 'none';
             summary.textContent = `Followers ${followers.length.toLocaleString()} · Following ${following.length.toLocaleString()}`;
-            showToast('Scan completed successfully!');
+            showToast('Scan completed successfully');
         } catch (err) {
             phase.textContent = STATE.stopScanFlag || err.name === 'AbortError' ? 'Scan stopped' : 'Scan failed';
-            notice.textContent = `⚠️ ${err.message} · Relationship results not updated`;
+            notice.textContent = `⚠️ ${err.message} · Relationships not updated`;
             notice.style.display = 'block';
             summary.textContent = phase.textContent;
         } finally {
@@ -1821,6 +2445,7 @@
         else if (STATE.relationshipFilter === 'mutual') pool = STATE.mutual;
         else if (STATE.relationshipFilter === 'lost') pool = STATE.lostFollowers;
         else if (STATE.relationshipFilter === 'ghost') pool = STATE.ghostFollowers;
+        else if (STATE.relationshipFilter === 'inactive') pool = STATE.inactiveFollowing;
         else if (STATE.relationshipFilter === 'whitelist') pool = Array.from(STATE.whitelist.values());
 
         return pool.filter(u => {
@@ -1849,16 +2474,17 @@
         let tagText = 'Not Following Back';
         if (STATE.relationshipFilter === 'fans') { tagClass = 'fan'; tagText = 'Fan'; }
         else if (STATE.relationshipFilter === 'mutual') { tagClass = 'mutual'; tagText = 'Mutual'; }
-        else if (STATE.relationshipFilter === 'lost') { tagClass = 'lost'; tagText = 'Lost Follower'; }
-        else if (STATE.relationshipFilter === 'ghost') { tagClass = 'ghost'; tagText = '👻 Ghost Account'; }
+        else if (STATE.relationshipFilter === 'lost') { tagClass = 'lost'; tagText = 'Lost'; }
+        else if (STATE.relationshipFilter === 'ghost') { tagClass = 'ghost'; tagText = '👻 Ghost'; }
+        else if (STATE.relationshipFilter === 'inactive') { tagClass = 'ghost'; tagText = '⏱️ Inactive'; }
         else if (STATE.relationshipFilter === 'whitelist') { tagClass = 'mutual'; tagText = '⭐ Whitelist'; }
 
         if (STATE.scanIncomplete && STATE.followers.length === 0 && (STATE.relationshipFilter === 'not_following_back' || STATE.relationshipFilter === 'mutual' || STATE.relationshipFilter === 'fans')) {
             listEl.innerHTML = `
                 <div style="padding: 48px 24px; text-align: center; color: var(--mp-rose); line-height: 1.6;">
-                    <div style="font-size: 15px; font-weight: 600; margin-bottom: 8px;">${STATE.isScanning ? 'Scanning relationship data...' : 'No scan data available yet'}</div>
+                    <div style="font-size: 15px; font-weight: 600; margin-bottom: 8px;">${STATE.isScanning ? 'Scanning relationships...' : 'No complete scan results yet'}</div>
                     <div style="color: var(--mp-text-secondary); font-size: 13px; max-width: 500px; margin: 0 auto;">
-                        ${STATE.isScanning ? 'Please wait for Followers and Following to finish loading.' : 'Check the status above and click Start Scan to analyze.'}
+                        ${STATE.isScanning ? 'Please wait for followers and following to finish fetching.' : 'Check scan status above or click Scan Relationships to start.'}
                     </div>
                 </div>
             `;
@@ -1866,7 +2492,7 @@
         }
 
         if (currentPool.length === 0) {
-            listEl.innerHTML = `<div style="padding: 48px; text-align: center; color: var(--mp-text-muted);">No users found matching current filters</div>`;
+            listEl.innerHTML = `<div style="padding: 48px; text-align: center; color: var(--mp-text-muted);">No accounts match current filter</div>`;
             return;
         }
 
@@ -1880,30 +2506,34 @@
             const isChecked = STATE.selectedIds.has(uid);
             const avatar = user.profile_pic_url || '';
             const initial = String(user.username || '?').slice(0, 1).toUpperCase();
+            let displayTag = tagText;
+            if (STATE.relationshipFilter === 'inactive' && user.dormant_days !== undefined) {
+                displayTag = typeof user.dormant_days === 'number' ? `⏱️ Inactive ${user.dormant_days}d` : `⏱️ ${user.dormant_days}`;
+            }
 
             html += `
                 <div class="maxpland-user-row" data-id="${escapeHtml(uid)}">
                     <div class="maxpland-user-left">
-                        <input type="checkbox" class="maxpland-checkbox user-select-checkbox" data-id="${escapeHtml(uid)}" ${isChecked ? 'checked' : ''} ${isWhitelisted ? 'disabled title="In Whitelist (Protected from Unfollow)"' : ''}>
+                        <input type="checkbox" class="maxpland-checkbox user-select-checkbox" data-id="${escapeHtml(uid)}" ${isChecked ? 'checked' : ''} ${isWhitelisted ? 'disabled title="Protected in Whitelist (Safe from unfollow)"' : ''}>
                         ${avatar ? `<img class="maxpland-avatar" src="${escapeHtml(avatar)}" loading="lazy" alt="">` : `<span class="maxpland-avatar">${escapeHtml(initial)}</span>`}
                         <div class="maxpland-user-names">
                             <div class="maxpland-username-wrap">
                                 <a href="https://www.instagram.com/${encodeURIComponent(user.username || '')}/" target="_blank" rel="noopener noreferrer" class="maxpland-username">${escapeHtml(user.username || 'unknown')}</a>
                                 ${user.is_verified ? `<span title="Verified">${ICONS.VERIFIED}</span>` : ''}
                                 ${user.is_private ? `<span title="Private Account" style="color:var(--mp-text-muted);display:flex;align-items:center;">${ICONS.LOCK}</span>` : ''}
-                                <span class="maxpland-status-tag ${tagClass}">${tagText}</span>
+                                <span class="maxpland-status-tag ${tagClass}">${escapeHtml(displayTag)}</span>
                             </div>
                             <span class="maxpland-fullname">${escapeHtml(user.full_name || '')}</span>
                         </div>
                     </div>
                     <div class="maxpland-user-actions">
-                        <a href="https://www.instagram.com/${encodeURIComponent(user.username || '')}/" target="_blank" rel="noopener noreferrer" class="maxpland-icon-action" title="Open Instagram profile">
+                        <a href="https://www.instagram.com/${encodeURIComponent(user.username || '')}/" target="_blank" rel="noopener noreferrer" class="maxpland-icon-action" title="Open Instagram Profile">
                             ${ICONS.EXTERNAL}
                         </a>
                         <button type="button" class="maxpland-icon-action maxpland-star-btn" data-id="${escapeHtml(uid)}" title="${isWhitelisted ? 'Remove from Whitelist' : 'Add to Whitelist'}">
                             ${isWhitelisted ? ICONS.STAR_FILLED : ICONS.STAR}
                         </button>
-                        ${STATE.relationshipFilter === 'not_following_back' || STATE.relationshipFilter === 'mutual' ? `
+                        ${STATE.relationshipFilter === 'not_following_back' || STATE.relationshipFilter === 'mutual' || STATE.relationshipFilter === 'inactive' ? `
                             <button type="button" class="maxpland-row-unfollow-btn" data-id="${escapeHtml(uid)}" data-user="${escapeHtml(user.username || '')}">
                                 ${ICONS.UNFOLLOW} Unfollow
                             </button>
@@ -1921,69 +2551,10 @@
             more.className = 'maxpland-btn-secondary';
             more.style.margin = '10px auto';
             more.style.display = 'block';
-            more.textContent = `Load More (${visibleUsers.length.toLocaleString()} / ${currentPool.length.toLocaleString()})`;
+            more.textContent = `Show more (${visibleUsers.length.toLocaleString()} / ${currentPool.length.toLocaleString()})`;
             more.onclick = () => { STATE.relationshipLimit += 100; renderRelationshipList(); };
             listEl.append(more);
         }
-
-        // Bind Row Checkbox Change
-        listEl.querySelectorAll('.user-select-checkbox').forEach(box => {
-            box.addEventListener('change', (e) => {
-                const uid = box.dataset.id;
-                if (e.target.checked) STATE.selectedIds.add(uid);
-                else STATE.selectedIds.delete(uid);
-                updateBulkActionBar();
-            });
-        });
-
-        // Bind Star Toggle
-        listEl.querySelectorAll('.maxpland-star-btn').forEach(star => {
-            star.addEventListener('click', async () => {
-                const uid = star.dataset.id;
-                const user = currentPool.find(u => String(u.pk || u.pk_id || u.id) === uid) || STATE.whitelist.get(uid);
-                if (user) {
-                    star.disabled = true;
-                    try {
-                        const added = await MaxPlandVault.toggleWhitelist(user);
-                        STATE.whitelist = await MaxPlandVault.getWhitelist();
-                        document.getElementById('pill-count-white').textContent = STATE.whitelist.size.toLocaleString();
-                        if (added) STATE.selectedIds.delete(uid);
-                        showToast(added ? `Added @${user.username} to Whitelist` : `Removed @${user.username} from Whitelist`);
-                        updateBulkActionBar();
-                        renderRelationshipList();
-                    } catch (err) { alert(err.message || String(err)); }
-                    finally { star.disabled = false; }
-                }
-            });
-        });
-
-        // Bind Single Unfollow Button
-        listEl.querySelectorAll('.maxpland-row-unfollow-btn').forEach(btn => {
-            btn.addEventListener('click', async () => {
-                if (STATE.isScanning || STATE.isUnfollowing || STATE.scanIncomplete) return;
-                const uid = btn.dataset.id;
-                const uname = btn.dataset.user;
-                if (!confirm(`Are you sure you want to unfollow @${uname}?`)) return;
-
-                STATE.isUnfollowing = true;
-                btn.disabled = true;
-                btn.textContent = 'Processing...';
-                try {
-                    await IgBridge.unfollowUser(uid);
-                    showToast(`Successfully unfollowed @${uname}`);
-                    applyUnfollowResult(uid, uname);
-                    STATE.selectedIds.delete(uid);
-                    document.getElementById('stat-not-following-back').textContent = STATE.notFollowingBack.length.toLocaleString();
-                    document.getElementById('pill-count-not').textContent = STATE.notFollowingBack.length.toLocaleString();
-                    updateBulkActionBar();
-                    renderRelationshipList();
-                } catch (err) {
-                    alert(`Unfollow failed: ${err.message || err}`);
-                    btn.disabled = false;
-                    btn.innerHTML = `${ICONS.UNFOLLOW} Unfollow`;
-                } finally { STATE.isUnfollowing = false; }
-            });
-        });
     }
 
     function applyUnfollowResult(uid, username = '') {
@@ -2010,7 +2581,7 @@
 
         if (count > 0) {
             bar.style.display = 'flex';
-            countLabel.textContent = `Selected ${count.toLocaleString()} users`;
+            countLabel.textContent = `${count.toLocaleString()} selected`;
         } else {
             bar.style.display = 'none';
         }
@@ -2043,7 +2614,7 @@
         }
 
         const estSeconds = Math.round(count * ((APP_CONFIG.UNFOLLOW_DELAY_MIN + APP_CONFIG.UNFOLLOW_DELAY_MAX) / 2000));
-        const proceed = confirm(`⚠️ Safety Warning:\nYou are about to unfollow ${count} accounts.\nTo prevent Instagram rate limits and flags, this will take approximately ${Math.ceil(estSeconds / 60)} minutes (3-5s safe random delay per user).\n\nDo you want to proceed?`);
+        const proceed = confirm(`⚠️ Safety Warning:\nYou are about to unfollow ${count} accounts.\nTo protect your account from bot detection, this will take approx ${Math.ceil(estSeconds / 60)} min (randomized 3-5s per request).\n\nDo you want to proceed?`);
         if (!proceed) return;
 
         STATE.isUnfollowing = true;
@@ -2058,7 +2629,7 @@
         const noticeEl = document.getElementById('maxpland-scan-notice');
 
         progressCont.style.display = 'block';
-        phaseEl.textContent = 'Preparing safe unfollow queue...';
+        phaseEl.textContent = 'Preparing safe unfollow batch...';
         noticeEl.style.display = 'none';
 
         const idsToUnfollow = Array.from(STATE.selectedIds);
@@ -2068,7 +2639,7 @@
         try {
             for (let i = 0; i < idsToUnfollow.length; i++) {
                 if (STATE.stopUnfollowFlag) {
-                    phaseEl.textContent = 'Unfollow queue stopped by user';
+                    phaseEl.textContent = 'Unfollow batch stopped by user';
                     break;
                 }
 
@@ -2101,7 +2672,7 @@
                     const delay = Math.floor(Math.random() * (APP_CONFIG.UNFOLLOW_DELAY_MAX - APP_CONFIG.UNFOLLOW_DELAY_MIN + 1)) + APP_CONFIG.UNFOLLOW_DELAY_MIN;
                     for (let s = Math.ceil(delay / 1000); s > 0; s--) {
                         if (STATE.stopUnfollowFlag) break;
-                        phaseEl.textContent = `Safety cooldown before next: ${s}s (@${uname} done)`;
+                        phaseEl.textContent = `Safety delay... ${s}s (${uname} done)`;
                         await sleep(1000);
                     }
                 }
@@ -2111,7 +2682,7 @@
             document.getElementById('pill-count-not').textContent = STATE.notFollowingBack.length.toLocaleString();
             updateBulkActionBar();
             renderRelationshipList();
-            showToast(`Unfollow complete: ${successCount} succeeded, ${failCount} failed`);
+            showToast(`Unfollow completed: ${successCount} succeeded, ${failCount} failed`);
         } finally {
             STATE.isUnfollowing = false;
             if (!STATE.stopUnfollowFlag) STATE.progressHideTimer = setTimeout(() => { progressCont.style.display = 'none'; }, 2500);
@@ -2125,15 +2696,15 @@
     async function copyVisibleUsernames() {
         const pool = getFilteredUsers();
         if (!pool.length) {
-            alert('No usernames found matching current filters to copy.');
+            alert('No usernames found under current filter to copy.');
             return;
         }
         const text = pool.map(u => u.username || '').filter(Boolean).join('\n');
         try {
             await navigator.clipboard.writeText(text);
-            showToast(`Copied ${pool.length.toLocaleString()} usernames to clipboard.`);
+            showToast(`Copied ${pool.length.toLocaleString()} usernames to clipboard`);
         } catch (_) {
-            alert('Failed to copy to clipboard automatically. Please try again.');
+            alert('Failed to copy to clipboard. Please retry.');
         }
     }
 
@@ -2170,13 +2741,13 @@
     function exportWhitelistBackup() {
         const whitelistArr = Array.from(STATE.whitelist.values());
         if (!whitelistArr.length) {
-            alert('Whitelist is empty. Nothing to backup.');
+            alert('No starred accounts in whitelist to export.');
             return;
         }
         const json = JSON.stringify(whitelistArr, null, 2);
         const blob = new Blob([json], { type: 'application/json;charset=utf-8;' });
         downloadBlob(blob, `IG_MaxPland_Whitelist_Backup_${new Date().toISOString().slice(0,10)}.json`);
-        showToast('Whitelist backup downloaded successfully.');
+        showToast('Starred whitelist exported successfully');
     }
 
     async function handleWhitelistRestoreFile(e) {
@@ -2185,11 +2756,11 @@
         try {
             const text = await file.text();
             const data = JSON.parse(text);
-            if (!Array.isArray(data)) throw new Error('Invalid backup file format (must be a JSON array).');
+            if (!Array.isArray(data)) throw new Error('Invalid backup file (Must be JSON array)');
             const count = await MaxPlandVault.importWhitelist(data);
             STATE.whitelist = await MaxPlandVault.getWhitelist();
             document.getElementById('pill-count-white').textContent = STATE.whitelist.size.toLocaleString();
-            showToast(`Restored ${count} accounts to Whitelist.`);
+            showToast(`Restored ${count} accounts to whitelist`);
             renderRelationshipList();
         } catch (err) {
             alert(`Import failed: ${err.message || err}`);
@@ -2253,6 +2824,292 @@
         return downloadResolvedMedia(resolved, options);
     }
 
+    /* ==========================================================================
+       9. HEALTH DASHBOARD, INACTIVE RADAR & SETTINGS SYNC
+       ========================================================================== */
+
+    function syncFeaturesTab() {
+        const el = id => document.getElementById(id);
+        const p = STATE.prefs || {};
+        if (el('pref-switch-stealth-story')) el('pref-switch-stealth-story').checked = Boolean(p.stealthStory);
+        if (el('pref-switch-clean-feed')) el('pref-switch-clean-feed').checked = Boolean(p.cleanFeed);
+        if (el('pref-switch-feed-download')) el('pref-switch-feed-download').checked = Boolean(p.quickDownloadFeed);
+        if (el('pref-switch-story-toolbar')) el('pref-switch-story-toolbar').checked = Boolean(p.quickDownloadStory);
+    }
+
+    function syncSettingsTab() {
+        const el = id => document.getElementById(id);
+        const p = STATE.prefs || {};
+        if (el('pref-setting-inactive-threshold')) el('pref-setting-inactive-threshold').value = String(p.inactiveThresholdDays || 180);
+    }
+
+    async function runInactiveScan() {
+        if (STATE.isScanning || STATE.isUnfollowing || STATE.isScanningInactive) return;
+        if (!STATE.following.length) {
+            alert('Please run "Scan Relationships" first to load your Following list.');
+            return;
+        }
+
+        const thresholdDays = Number(STATE.prefs?.inactiveThresholdDays || 180);
+        const thresholdSeconds = thresholdDays * 86400;
+        const nowSec = Math.floor(Date.now() / 1000);
+
+        STATE.isScanningInactive = true;
+        STATE.stopInactiveScanFlag = false;
+        STATE.inactiveFollowing = [];
+
+        const el = id => document.getElementById(id);
+        const progress = el('maxpland-global-progress');
+        const phase = el('maxpland-scan-phase');
+        const countStat = el('maxpland-scan-stat-count');
+        const timerStat = el('maxpland-scan-stat-timer');
+        const fill = el('maxpland-progress-fill');
+        const btn = el('maxpland-btn-scan-inactive');
+
+        if (btn) btn.disabled = true;
+        progress.style.display = 'block';
+        phase.textContent = `[Inactive Radar] Scanning activity (threshold > ${thresholdDays} days)...`;
+        fill.style.width = '0%';
+
+        const scanStartTime = Date.now();
+        const timer = setInterval(() => {
+            if (timerStat) timerStat.textContent = `⏱️ ${formatTime(Math.floor((Date.now() - scanStartTime) / 1000))}`;
+        }, 1000);
+
+        try {
+            const pool = [...STATE.following];
+            let checked = 0;
+            let foundInactive = 0;
+            let newFetches = 0;
+            const BATCH_SAFETY_LIMIT = 20; // ponytail: limit un-cached fetches to 20 per run to prevent automated scraping detection
+
+            for (const user of pool) {
+                if (STATE.stopInactiveScanFlag || STATE.stopScanFlag) break;
+
+                const uid = String(user.id || user.pk_id || user.pk || '');
+                if (!uid) continue;
+
+                checked++;
+                const pct = Math.round((checked / pool.length) * 100);
+                fill.style.width = `${pct}%`;
+                phase.textContent = `[Inactive Radar] Checking @${user.username || uid} (${checked}/${pool.length})...`;
+                countStat.textContent = `Inactive found: ${foundInactive}`;
+
+                let lastTakenAt = null;
+                let hasPosts = true;
+
+                // 1. Check IndexedDB Cache first
+                const cached = await MaxPlandVault.getUserActivity(uid);
+                const cacheValid = cached && cached.checked_at && (Date.now() - cached.checked_at < 14 * 86400 * 1000);
+
+                if (cacheValid) {
+                    lastTakenAt = cached.last_post_taken_at;
+                    hasPosts = cached.has_posts !== false;
+                } else {
+                    // 2. Fetch with jitter delay
+                    newFetches++;
+                    try {
+                        const info = await IgBridge.fetchUserLastPost(uid);
+                        lastTakenAt = info.last_taken_at;
+                        hasPosts = info.has_posts;
+
+                        await MaxPlandVault.saveUserActivity({
+                            id: uid,
+                            username: user.username || '',
+                            last_post_taken_at: lastTakenAt,
+                            has_posts: hasPosts,
+                            checked_at: Date.now()
+                        });
+                    } catch (err) {
+                        if (err.code === 'RATE_LIMIT') throw err;
+                    }
+
+                    // Respect safety jitter delay (3500 - 6000ms)
+                    const jitter = 3500 + Math.floor(Math.random() * 2500);
+                    for (let ms = 0; ms < jitter && !STATE.stopInactiveScanFlag && !STATE.stopScanFlag; ms += 250) {
+                        await sleep(250);
+                    }
+
+                    if (newFetches >= BATCH_SAFETY_LIMIT) {
+                        phase.textContent = `[Inactive Radar] Safe batch limit reached (${BATCH_SAFETY_LIMIT} accounts). Click to continue.`;
+                        showToast(`Safe batch limit reached (${BATCH_SAFETY_LIMIT}/batch). Click scan to resume.`, 5000);
+                        break;
+                    }
+                }
+
+                const isDormant = !hasPosts || (lastTakenAt && (nowSec - lastTakenAt > thresholdSeconds));
+                if (isDormant) {
+                    foundInactive++;
+                    const dormantDays = lastTakenAt ? Math.floor((nowSec - lastTakenAt) / 86400) : 'No posts';
+                    user.dormant_days = dormantDays;
+                    STATE.inactiveFollowing.push(user);
+                }
+            }
+
+            if (el('pill-count-inactive')) el('pill-count-inactive').textContent = STATE.inactiveFollowing.length;
+            phase.textContent = `[Inactive Radar] Completed. Found ${STATE.inactiveFollowing.length} inactive accounts.`;
+            showToast(`Detected ${STATE.inactiveFollowing.length} inactive following accounts.`);
+
+            // Switch to inactive filter
+            const pill = document.querySelector('.maxpland-pill-btn[data-filter="inactive"]');
+            if (pill) pill.click();
+
+        } catch (err) {
+            phase.textContent = `[Inactive Radar] Error: ${err.message}`;
+            showToast(err.message, 4000);
+        } finally {
+            clearInterval(timer);
+            if (btn) btn.disabled = false;
+            STATE.isScanningInactive = false;
+            setTimeout(() => { progress.style.display = 'none'; }, 3000);
+        }
+    }
+
+    async function renderHealthDashboard() {
+        const el = id => document.getElementById(id);
+        const followerCount = STATE.followers.length;
+        const followingCount = STATE.following.length;
+
+        // 1. Ratio
+        const ratio = followingCount > 0 ? (followerCount / followingCount) : 0;
+        const ratioVal = el('health-ratio-val');
+        const ratioBadge = el('health-ratio-badge');
+        if (ratioVal && ratioBadge) {
+            if (followerCount === 0 && followingCount === 0) {
+                ratioVal.textContent = '-';
+                ratioBadge.textContent = 'Please scan relationships first';
+                ratioBadge.style.background = 'var(--mp-bg-hover)';
+                ratioBadge.style.color = 'var(--mp-text-secondary)';
+            } else {
+                ratioVal.textContent = `${ratio.toFixed(2)}x`;
+                if (ratio >= 1.5) {
+                    ratioBadge.textContent = '⭐ Creator / Influencer';
+                    ratioBadge.style.background = 'var(--mp-emerald-bg)';
+                    ratioBadge.style.color = 'var(--mp-emerald)';
+                } else if (ratio >= 0.8) {
+                    ratioBadge.textContent = '⚖️ Healthy Balance';
+                    ratioBadge.style.background = 'var(--mp-cyan-bg)';
+                    ratioBadge.style.color = 'var(--mp-cyan)';
+                } else {
+                    ratioBadge.textContent = '🔍 Consumer heavy';
+                    ratioBadge.style.background = 'var(--mp-amber-bg)';
+                    ratioBadge.style.color = 'var(--mp-amber)';
+                }
+            }
+        }
+
+        // 2. Mutual Rate
+        const mutualVal = el('health-mutual-val');
+        const mutualBadge = el('health-mutual-badge');
+        if (mutualVal && mutualBadge) {
+            if (followingCount === 0) {
+                mutualVal.textContent = '-';
+                mutualBadge.textContent = 'No data';
+            } else {
+                const rate = Math.round((STATE.mutual.length / followingCount) * 100);
+                mutualVal.textContent = `${rate}%`;
+                mutualBadge.textContent = `${STATE.mutual.length} of ${followingCount} accounts`;
+            }
+        }
+
+        // 3. Not Back Outbound
+        const notbackVal = el('health-notback-val');
+        const notbackBadge = el('health-notback-badge');
+        if (notbackVal && notbackBadge) {
+            if (followingCount === 0) {
+                notbackVal.textContent = '-';
+                notbackBadge.textContent = 'No data';
+            } else {
+                const rate = Math.round((STATE.notFollowingBack.length / followingCount) * 100);
+                notbackVal.textContent = `${rate}%`;
+                notbackBadge.textContent = `${STATE.notFollowingBack.length} not following back`;
+            }
+        }
+
+        // 4. Ghost & Inactive Impact
+        const ghostVal = el('health-ghost-val');
+        const ghostBadge = el('health-ghost-badge');
+        if (ghostVal && ghostBadge) {
+            const totalGhost = STATE.ghostFollowers.length + STATE.inactiveFollowing.length;
+            if (followerCount === 0 && followingCount === 0) {
+                ghostVal.textContent = '-';
+                ghostBadge.textContent = 'No data';
+            } else {
+                const rate = Math.round((totalGhost / (followerCount || 1)) * 100);
+                ghostVal.textContent = `${totalGhost} accounts`;
+                ghostBadge.textContent = `Ghost: ${STATE.ghostFollowers.length} / Inactive: ${STATE.inactiveFollowing.length}`;
+            }
+        }
+
+        // 5. Historical Snapshots & Pure SVG Sparkline
+        const chartBox = el('health-chart-container');
+        const deltaLabel = el('health-drift-delta');
+        try {
+            const accountId = STATE.relationshipAccountId || STATE.currentUser?.id;
+            const snapshots = await MaxPlandVault.getAllSnapshots(accountId, 8);
+            if (snapshots.length >= 2) {
+                const sorted = [...snapshots].reverse();
+                const counts = sorted.map(s => s.follower_count || 0);
+                const min = Math.min(...counts);
+                const max = Math.max(...counts);
+                const diff = counts[counts.length - 1] - counts[0];
+
+                if (deltaLabel) {
+                    deltaLabel.textContent = `${diff >= 0 ? '+' : ''}${diff} followers`;
+                    deltaLabel.style.color = diff >= 0 ? 'var(--mp-emerald)' : 'var(--mp-rose)';
+                }
+
+                const w = 700, h = 110;
+                const pad = 24;
+                const range = (max - min) || 1;
+                const points = counts.map((c, i) => {
+                    const x = pad + (i / (counts.length - 1)) * (w - pad * 2);
+                    const y = h - pad - ((c - min) / range) * (h - pad * 2);
+                    return { x, y, val: c, date: new Date(sorted[i].timestamp).toLocaleDateString('th-TH') };
+                });
+
+                const polyline = points.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+                const dots = points.map(p => `
+                    <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4" fill="#38bdf8" stroke="#0b0d10" stroke-width="2">
+                        <title>${p.date}: ${p.val} followers</title>
+                    </circle>
+                    <text x="${p.x.toFixed(1)}" y="${(p.y - 8).toFixed(1)}" font-size="10" fill="#94a3b8" text-anchor="middle">${p.val}</text>
+                `).join('');
+
+                chartBox.innerHTML = `
+                    <svg viewBox="0 0 ${w} ${h}" class="maxpland-sparkline">
+                        <defs>
+                            <linearGradient id="mp-chart-grad" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.3"/>
+                                <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.0"/>
+                            </linearGradient>
+                        </defs>
+                        <polyline fill="none" stroke="#0284c7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" points="${polyline}" />
+                        ${dots}
+                    </svg>
+                `;
+            } else if (snapshots.length === 1) {
+                if (deltaLabel) deltaLabel.textContent = '1 snapshot recorded';
+                chartBox.innerHTML = `<div style="padding:20px;text-align:center;color:var(--mp-text-muted);">First snapshot recorded (${snapshots[0].follower_count} followers). Run another scan to view growth comparison curve.</div>`;
+            } else {
+                if (deltaLabel) deltaLabel.textContent = '';
+                chartBox.innerHTML = `<div style="padding:20px;text-align:center;color:var(--mp-text-muted);">No snapshot history. Run a relationship scan to begin tracking.</div>`;
+            }
+        } catch (_) {}
+
+        // 6. Advice Box
+        const advice = el('health-advice-text');
+        if (advice) {
+            if (STATE.notFollowingBack.length > 50) {
+                advice.textContent = `You have ${STATE.notFollowingBack.length} accounts not following you back. Review in Relationships tab and safely unfollow non-whitelisted accounts to restore balance.`;
+            } else if (ratio >= 1.0) {
+                advice.textContent = `Your account structure is healthy with a strong follower ratio (${ratio.toFixed(2)}x) and solid mutual engagement.`;
+            } else {
+                advice.textContent = `You follow more accounts than follow you back. Use Inactive Radar to detect and prune accounts that haven't posted in over 6 months.`;
+            }
+        }
+    }
+
     async function renderMediaVault() {
         const list = document.getElementById('maxpland-vault-list');
         if (!list) return;
@@ -2269,7 +3126,7 @@
                     <span class="maxpland-username">${escapeHtml(r.username || 'instagram')} · ${escapeHtml(r.shortcode || '')}</span>
                     <span class="maxpland-fullname">${escapeHtml(r.media_type || '')}${r.audio_only ? ' · audio' : ''} · ${new Date(r.downloaded_at).toLocaleString()}</span>
                 </div>
-                <a class="maxpland-btn-secondary" target="_blank" rel="noopener noreferrer" href="https://www.instagram.com/p/${encodeURIComponent(r.shortcode || '')}/" style="text-decoration:none;padding:3px 8px;font-size:11px;">View Post</a>
+                <a class="maxpland-btn-secondary" target="_blank" rel="noopener noreferrer" href="https://www.instagram.com/p/${encodeURIComponent(r.shortcode || '')}/" style="text-decoration:none;padding:3px 8px;font-size:11px;">View</a>
             </div>`).join('');
     }
 
@@ -2278,7 +3135,7 @@
         const input = document.getElementById('maxpland-media-queue-input');
         const status = document.getElementById('maxpland-media-queue-status');
         const codes = extractShortcodesFromText(input.value || '');
-        if (!codes.length) { alert('Please paste Instagram post or Reel links first.'); return; }
+        if (!codes.length) { alert('Please paste Instagram post links or shortcodes first'); return; }
         const accountId = IgBridge.getCookie('ds_user_id');
         const key = JSON.stringify([accountId, codes, skipExisting]);
         if (STATE.mediaQueue?.key !== key) STATE.mediaQueue = { key, finished: new Set(), attempted: new Set() };
@@ -2293,7 +3150,7 @@
             for (let i = 0; i < codes.length; i++) {
                 const code = codes[i];
                 if (queue.finished.has(code)) continue;
-                status.textContent = (i + 1) + '/' + codes.length + ' · Downloading ' + code + '...';
+                status.textContent = (i + 1) + '/' + codes.length + ' · Fetching ' + code + '...';
                 try {
                     IgBridge.assertAccount(accountId);
                     const retry = queue.attempted.has(code);
@@ -2309,13 +3166,13 @@
                     failed++;
                     if (IgBridge.isSessionError(err)) {
                         stopped = true;
-                        status.textContent = 'Queue stopped: ' + err.message + ' · ' + (codes.length - queue.finished.size) + ' posts remaining. Click Download to resume.';
+                        status.textContent = 'Queue paused: ' + err.message + ' · ' + (codes.length - queue.finished.size) + ' remaining. Click download to resume.';
                         break;
                     }
                 }
                 if (i < codes.length - 1) await sleep(800);
             }
-            if (!stopped) status.textContent = 'Downloaded ' + done + ', skipped ' + skipped + ', failed ' + failed + ' · Completed ' + queue.finished.size + '/' + codes.length + ' posts';
+            if (!stopped) status.textContent = 'Downloaded: ' + done + ', Skipped: ' + skipped + ', Failed: ' + failed + ' · ' + queue.finished.size + '/' + codes.length + ' done';
         } catch (err) { status.textContent = err.message; }
         finally {
             STATE.isMediaQueueRunning = false;
@@ -2328,6 +3185,10 @@
 
     // In-Feed Media Native Action Bar Integration (Zero Vertical Space Waste)
     function injectInFeedDownloadButtons(root = document) {
+        if (STATE.prefs && STATE.prefs.quickDownloadFeed === false) {
+            document.querySelectorAll('.maxpland-action-wrap').forEach(el => el.remove());
+            return;
+        }
         const articles = root instanceof Element && root.matches('article') ? [root] : root.querySelectorAll('article');
         articles.forEach(article => {
             const section = article.querySelector('section');
@@ -2346,8 +3207,8 @@
             const btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'maxpland-action-btn';
-            btn.setAttribute('aria-label', 'Download Media (MaxPland)');
-            btn.title = 'Download Media (MaxPland) · Click for options';
+            btn.setAttribute('aria-label', 'Download media (MaxPland)');
+            btn.title = 'Download media (MaxPland) · Click for options';
             btn.innerHTML = ICONS.DOWNLOAD;
 
             const menu = document.createElement('div');
@@ -2368,7 +3229,7 @@
             const dlAll = document.createElement('button');
             dlAll.type = 'button';
             dlAll.className = 'maxpland-menu-item maxpland-menu-dl-all';
-            dlAll.innerHTML = ICONS.DOWNLOAD_ALL + '<span>Download All (Carousel)</span>';
+            dlAll.innerHTML = ICONS.DOWNLOAD_ALL + '<span>Download all media</span>';
             dlAll.onclick = (e) => {
                 e.stopPropagation();
                 closeAllMenus();
@@ -2379,7 +3240,7 @@
             const openTab = document.createElement('button');
             openTab.type = 'button';
             openTab.className = 'maxpland-menu-item';
-            openTab.innerHTML = ICONS.EXTERNAL + '<span>Open Media in New Tab</span>';
+            openTab.innerHTML = ICONS.EXTERNAL + '<span>Open media in new tab</span>';
             openTab.onclick = (e) => {
                 e.stopPropagation();
                 closeAllMenus();
@@ -2475,8 +3336,8 @@
             try {
                 const results = await downloadByShortcode(shortcode, { allCarousel, skipExisting: false });
                 const done = results.filter(x => x.status === 'done').length;
-                if (!done) throw new Error('No downloadable media stream found.');
-                if (typeof GM_notification === 'function') GM_notification({ title: APP_CONFIG.APP_NAME, text: `Downloaded ${done} file(s) from ${shortcode} successfully.`, timeout: 2500 });
+                if (!done) throw new Error('No downloadable media stream found');
+                if (typeof GM_notification === 'function') GM_notification({ title: APP_CONFIG.APP_NAME, text: `Downloaded ${done} file(s) from ${shortcode}`, timeout: 2500 });
                 return;
             } catch (err) {
                 IgBridge.assertAccount(accountId);
@@ -2491,7 +3352,7 @@
         const img = article.querySelector('img[srcset]') || article.querySelector('img');
         const mediaUrl = video?.currentSrc || video?.src || img?.currentSrc || img?.src || null;
         if (!mediaUrl || !/^https?:\/\//i.test(mediaUrl)) {
-            alert('Could not find a valid media URL in this post.');
+            alert('No downloadable media URL found for this post');
             return;
         }
         const isVideo = Boolean(video && (video.currentSrc || video.src));
@@ -2506,12 +3367,18 @@
         const img = article.querySelector('img[srcset]') || article.querySelector('img');
         const mediaUrl = video?.currentSrc || video?.src || img?.currentSrc || img?.src || null;
         if (mediaUrl) window.open(mediaUrl, '_blank', 'noopener,noreferrer');
-        else alert('Media URL not found.');
+        else alert('No media URL found for this item');
     }
 
     // Story & Highlight Tools
     function injectStoryDownloadTools() {
         if (!location.pathname.startsWith('/stories/')) {
+            const existing = document.getElementById('maxpland-story-bar');
+            if (existing) existing.remove();
+            return;
+        }
+
+        if (STATE.prefs && STATE.prefs.quickDownloadStory === false) {
             const existing = document.getElementById('maxpland-story-bar');
             if (existing) existing.remove();
             return;
@@ -2526,6 +3393,28 @@
         bar.id = 'maxpland-story-bar';
         bar.className = 'maxpland-story-tools';
 
+        const stealthBtn = document.createElement('button');
+        stealthBtn.type = 'button';
+        stealthBtn.id = 'maxpland-story-stealth-toggle';
+        stealthBtn.className = 'maxpland-story-btn';
+        const isStealth = STATE.prefs?.stealthStory !== false;
+        stealthBtn.style.background = isStealth ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)';
+        stealthBtn.style.border = `1px solid ${isStealth ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)'}`;
+        stealthBtn.innerHTML = `<span>${isStealth ? '👁️ Stealth: ON' : '👁️ Stealth: OFF'}</span>`;
+        stealthBtn.title = isStealth ? 'Stealth Story Viewer active (Seen beacon blocked)' : 'Stealth Story Viewer off (Seen beacon sent normally)';
+        stealthBtn.onclick = () => {
+            const next = !(STATE.prefs?.stealthStory !== false);
+            STATE.prefs.stealthStory = next;
+            savePrefs();
+            stealthBtn.style.background = next ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)';
+            stealthBtn.style.border = `1px solid ${next ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)'}`;
+            stealthBtn.innerHTML = `<span>${next ? '👁️ Stealth: ON' : '👁️ Stealth: OFF'}</span>`;
+            stealthBtn.title = next ? 'Stealth Story Viewer active (Seen beacon blocked)' : 'Stealth Story Viewer off (Seen beacon sent normally)';
+            const modalSwitch = document.getElementById('pref-switch-stealth-story');
+            if (modalSwitch) modalSwitch.checked = next;
+            showToast(next ? 'Stealth Story Viewer enabled (Seen blocked)' : 'Stealth Story Viewer disabled');
+        };
+
         const dlBtn = document.createElement('button');
         dlBtn.type = 'button';
         dlBtn.className = 'maxpland-story-btn';
@@ -2535,7 +3424,7 @@
         const thumbBtn = document.createElement('button');
         thumbBtn.type = 'button';
         thumbBtn.className = 'maxpland-story-btn';
-        thumbBtn.innerHTML = ICONS.THUMBNAIL + '<span>Thumbnail</span>';
+        thumbBtn.innerHTML = ICONS.THUMBNAIL + '<span>Cover</span>';
         thumbBtn.onclick = () => downloadCurrentStoryMedia(true);
 
         const newTabBtn = document.createElement('button');
@@ -2544,7 +3433,7 @@
         newTabBtn.innerHTML = ICONS.EXTERNAL + '<span>Open Tab</span>';
         newTabBtn.onclick = () => openCurrentStoryMediaTab();
 
-        bar.append(dlBtn, thumbBtn, newTabBtn);
+        bar.append(stealthBtn, dlBtn, thumbBtn, newTabBtn);
         document.body.appendChild(bar);
     }
 
@@ -2554,7 +3443,7 @@
         const mediaUrl = isThumb ? (img?.currentSrc || img?.src) : (video?.currentSrc || video?.src || img?.currentSrc || img?.src);
 
         if (!mediaUrl) {
-            alert('No active story media URL found.');
+            alert('No active story media URL found');
             return;
         }
 
@@ -2565,7 +3454,7 @@
 
         try {
             await gmDownload(mediaUrl, filename);
-            showToast('Story download started successfully.');
+            showToast('Story download started');
         } catch (_) {
             window.open(mediaUrl, '_blank', 'noopener,noreferrer');
         }
@@ -2576,7 +3465,7 @@
         const img = document.querySelector('section:visible img._aa63, section:visible img[crossorigin], div[id^="mount"] section img[referrerpolicy]');
         const mediaUrl = video?.currentSrc || video?.src || img?.currentSrc || img?.src;
         if (mediaUrl) window.open(mediaUrl, '_blank', 'noopener,noreferrer');
-        else alert('Story URL not found.');
+        else alert('Story URL not found');
     }
 
     // Profile HD Avatar Downloader
@@ -2598,8 +3487,8 @@
         btn.id = 'maxpland-profile-avatar-btn';
         btn.type = 'button';
         btn.className = 'maxpland-avatar-badge';
-        btn.title = `Download HD Profile Picture of @${uname}`;
-        btn.innerHTML = ICONS.AVATAR + '<span>HD Profile Pic</span>';
+        btn.title = `Download HD profile picture of @${uname}`;
+        btn.innerHTML = ICONS.AVATAR + '<span>HD Avatar</span>';
         btn.onclick = async () => {
             btn.disabled = true;
             btn.textContent = 'Fetching HD...';
@@ -2607,15 +3496,15 @@
                 const hdUrl = await IgBridge.fetchUserProfileHD(uname);
                 const fallbackImg = document.querySelector('header img[alt*="profile"]');
                 const finalUrl = hdUrl || fallbackImg?.currentSrc || fallbackImg?.src;
-                if (!finalUrl) throw new Error('Profile picture not found.');
+                if (!finalUrl) throw new Error('Profile avatar not found');
                 const filename = `${uname}_profile_hd_${Date.now()}.jpg`;
                 await gmDownload(finalUrl, filename);
-                showToast(`Downloaded HD Profile Picture of @${uname}`);
+                showToast(`HD Avatar of @${uname} downloaded successfully`);
             } catch (err) {
-                alert(`Failed to download profile picture: ${err.message || err}`);
+                alert(`Failed to download profile avatar: ${err.message || err}`);
             } finally {
                 btn.disabled = false;
-                btn.innerHTML = ICONS.AVATAR + '<span>HD Profile Pic</span>';
+                btn.innerHTML = ICONS.AVATAR + '<span>HD Avatar</span>';
             }
         };
 
@@ -2628,10 +3517,14 @@
             if (timer) return;
             timer = setTimeout(() => {
                 timer = null;
-                injectInFeedDownloadButtons();
-                injectStoryDownloadTools();
-                injectProfileAvatarBadge();
-            }, 250);
+                const path = location.pathname;
+                if (path.startsWith('/stories/')) {
+                    injectStoryDownloadTools();
+                } else {
+                    injectInFeedDownloadButtons();
+                    injectProfileAvatarBadge();
+                }
+            }, 300);
         });
         observer.observe(document.body, { childList: true, subtree: true });
     }
@@ -2644,7 +3537,7 @@
         if (document.getElementById('maxpland-trigger-btn')) return;
         createUI();
         if (typeof GM_registerMenuCommand === 'function') {
-            GM_registerMenuCommand('Open MaxPland Studio', () => {
+            GM_registerMenuCommand('Open IG MaxPland', () => {
                 if (typeof window.openMaxPlandStudio === 'function') {
                     window.openMaxPlandStudio();
                 } else {
@@ -2660,6 +3553,9 @@
         } catch (err) {
             console.warn('[MaxPland] Local vault unavailable', err);
         }
+
+        installStorySeenInterceptor();
+        applyCleanFeedMode();
 
         injectInFeedDownloadButtons();
         injectStoryDownloadTools();

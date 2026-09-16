@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         IG MaxPland
 // @namespace    http://tampermonkey.net/
-// @version      2.4.9
-// @description  Instagram Relationship Scanner & Comprehensive Media Downloader (Anti-Slop Clean Precision v2.4.9)
+// @version      2.6.0
+// @description  Instagram Relationship Scanner & Comprehensive Media Downloader (Anti-Slop Clean Precision v2.6.0)
 // @author       P Choke & SORA
 // @match        https://*.instagram.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=instagram.com
@@ -10,6 +10,7 @@
 // @grant        GM_xmlhttpRequest
 // @grant        GM_notification
 // @grant        GM_registerMenuCommand
+// @grant        unsafeWindow
 // @connect      instagram.com
 // @connect      cdninstagram.com
 // @connect      fbcdn.net
@@ -28,15 +29,15 @@
 
     const APP_CONFIG = {
         APP_NAME: 'IG MaxPland',
-        VERSION: '2.4.9',
+        VERSION: '2.6.0',
         DB_NAME: 'IG_MAXPLAND_VAULT',
-        DB_VERSION: 5,
+        DB_VERSION: 6,
         PAGE_SIZE: 50,
         INSTAGRAM_WEB_APP_ID: '936619743392459',
         FOLLOWING_PAGE_SAFETY_LIMIT: 60,
         FOLLOWERS_PAGE_SAFETY_LIMIT: 250,
-        UNFOLLOW_DELAY_MIN: 3000,
-        UNFOLLOW_DELAY_MAX: 5000,
+        UNFOLLOW_DELAY_MIN: 4500,
+        UNFOLLOW_DELAY_MAX: 7500,
         DEFAULT_AVATAR_PATTERNS: [
             '44884218_345707102882519_2446069589734326272_n',
             '464760996_1254146839119862_3605321457742435801_n'
@@ -61,7 +62,13 @@
         LOCK: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`,
         BACKUP: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>`,
         RESTORE: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
-        AVATAR: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>`
+        AVATAR: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>`,
+        EYE: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>`,
+        SHIELD: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`,
+        ANALYTICS: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>`,
+        FEATURES: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>`,
+        SETTINGS: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>`,
+        CLOCK: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`
     };
 
     const NATIVE_IG_CSS = `
@@ -490,6 +497,60 @@
             from { opacity: 0; transform: translateY(4px); }
             to { opacity: 1; transform: translateY(0); }
         }
+
+        /* Feature Cards & Switch Controllers */
+        .maxpland-feature-card {
+            display: flex; align-items: center; justify-content: space-between; gap: 16px;
+            padding: 14px 16px; background: var(--mp-bg-card); border: 1px solid var(--mp-border-card);
+            border-radius: 8px; margin-bottom: 10px; transition: border-color .15s;
+        }
+        .maxpland-feature-card:hover { border-color: var(--mp-border-active); }
+        .maxpland-feature-info { flex: 1; }
+        .maxpland-feature-title { font-size: 13.5px; font-weight: 600; color: var(--mp-text-primary); display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+        .maxpland-feature-desc { font-size: 11.5px; color: var(--mp-text-secondary); line-height: 1.45; }
+        .maxpland-badge-emerald { font-size: 10px; padding: 2px 6px; border-radius: 4px; background: var(--mp-emerald-bg); color: var(--mp-emerald); font-weight: 700; text-transform: uppercase; }
+
+        /* Modern Toggle Switch */
+        .maxpland-switch { position: relative; display: inline-block; width: 42px; height: 22px; flex-shrink: 0; }
+        .maxpland-switch input { opacity: 0; width: 0; height: 0; }
+        .maxpland-slider {
+            position: absolute; cursor: pointer; inset: 0; background-color: var(--mp-bg-hover);
+            transition: .2s cubic-bezier(0.4, 0, 0.2, 1); border-radius: 22px; border: 1px solid var(--mp-border-card);
+        }
+        .maxpland-slider:before {
+            position: absolute; content: ""; height: 16px; width: 16px; left: 2px; bottom: 2px;
+            background-color: var(--mp-text-secondary); transition: .2s cubic-bezier(0.4, 0, 0.2, 1); border-radius: 50%;
+        }
+        .maxpland-switch input:checked + .maxpland-slider { background-color: var(--mp-blue); border-color: var(--mp-blue); }
+        .maxpland-switch input:checked + .maxpland-slider:before { transform: translateX(20px); background-color: #fff; }
+
+        /* Settings Panels */
+        .maxpland-settings-group {
+            background: var(--mp-bg-card); border: 1px solid var(--mp-border-card); border-radius: 8px;
+            padding: 14px 16px; margin-bottom: 12px;
+        }
+        .maxpland-settings-group-title { font-size: 13px; font-weight: 700; color: var(--mp-text-primary); margin: 0 0 10px; display: flex; align-items: center; gap: 6px; }
+        .maxpland-settings-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 0; border-top: 1px solid var(--mp-border-subtle); }
+        .maxpland-settings-row:first-of-type { border-top: none; padding-top: 0; }
+        .maxpland-select {
+            background: var(--mp-bg-panel); color: var(--mp-text-primary); border: 1px solid var(--mp-border-card);
+            border-radius: 6px; padding: 5px 10px; font-size: 12px; outline: none; cursor: pointer;
+        }
+
+        /* Health Dashboard Elements */
+        .maxpland-health-hero {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 14px;
+        }
+        .maxpland-health-card {
+            background: var(--mp-bg-card); border: 1px solid var(--mp-border-card); border-radius: 8px; padding: 14px 16px;
+        }
+        .maxpland-health-title { font-size: 11px; font-weight: 700; color: var(--mp-text-muted); text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px; }
+        .maxpland-health-val { font-size: 22px; font-weight: 800; color: var(--mp-text-primary); font-variant-numeric: tabular-nums; }
+        .maxpland-health-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 3px 8px; border-radius: 5px; font-weight: 600; margin-top: 6px; }
+        .maxpland-chart-box {
+            background: var(--mp-bg-card); border: 1px solid var(--mp-border-card); border-radius: 8px; padding: 16px; margin-bottom: 14px;
+        }
+        .maxpland-sparkline { width: 100%; height: 130px; overflow: visible; }
     `;
 
     /* ==========================================================================
@@ -516,6 +577,9 @@
                     if (!db.objectStoreNames.contains('media_vault')) {
                         const vault = db.createObjectStore('media_vault', { keyPath: 'key' });
                         vault.createIndex('downloaded_at', 'downloaded_at', { unique: false });
+                    }
+                    if (!db.objectStoreNames.contains('user_activity')) {
+                        db.createObjectStore('user_activity', { keyPath: 'id' });
                     }
                 };
                 req.onsuccess = (e) => {
@@ -682,6 +746,58 @@
                 req.onerror = () => resolve([]);
             });
         }
+
+        static async getAllSnapshots(accountId = null, limit = 20) {
+            const db = await this.init();
+            return new Promise((resolve) => {
+                const tx = db.transaction('snapshots', 'readonly');
+                const store = tx.objectStore('snapshots');
+                const req = store.openCursor(null, 'prev');
+                const list = [];
+                req.onsuccess = (e) => {
+                    const cursor = e.target.result;
+                    if (cursor && list.length < limit) {
+                        if (cursor.value.complete === true && (!accountId || String(cursor.value.account_id) === String(accountId))) {
+                            list.push(cursor.value);
+                        }
+                        cursor.continue();
+                    } else {
+                        resolve(list);
+                    }
+                };
+                req.onerror = () => resolve([]);
+            });
+        }
+
+        static async getUserActivity(userId) {
+            const db = await this.init();
+            return new Promise((resolve) => {
+                const tx = db.transaction('user_activity', 'readonly');
+                const req = tx.objectStore('user_activity').get(String(userId));
+                req.onsuccess = () => resolve(req.result || null);
+                req.onerror = () => resolve(null);
+            });
+        }
+
+        static async saveUserActivity(record) {
+            const db = await this.init();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction('user_activity', 'readwrite');
+                tx.objectStore('user_activity').put(record);
+                tx.oncomplete = () => resolve();
+                tx.onerror = () => reject(tx.error);
+            });
+        }
+
+        static async clearActivityCache() {
+            const db = await this.init();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction('user_activity', 'readwrite');
+                tx.objectStore('user_activity').clear();
+                tx.oncomplete = () => resolve();
+                tx.onerror = () => reject(tx.error);
+            });
+        }
     }
 
     /* ==========================================================================
@@ -692,6 +808,7 @@
         static cachedAppId = null;
         static currentUserId = null;
         static currentUsername = null;
+        static wwwClaim = null;
 
         static getAppId() {
             return APP_CONFIG.INSTAGRAM_WEB_APP_ID || '936619743392459';
@@ -839,9 +956,15 @@
             const fetchFn = typeof page.fetch === 'function' ? page.fetch.bind(page) : fetch;
             const method = String(options.method || 'GET').toUpperCase();
             const csrf = this.getCookie('csrftoken');
-            if (method !== 'GET' && !csrf) throw this.error('ไม่พบ CSRF token กรุณารีเฟรช Instagram', 'AUTH');
-            const headers = { 'X-IG-App-ID': this.getAppId(), 'X-Requested-With': 'XMLHttpRequest',
-                'Accept': 'application/json', ...(csrf ? { 'X-CSRFToken': csrf } : {}), ...options.headers };
+            // ponytail: align headers with real Instagram Web client (no X-Requested-With, add X-ASBD-ID and X-IG-WWW-Claim)
+            const headers = {
+                'X-IG-App-ID': this.getAppId(),
+                'X-ASBD-ID': '129477',
+                'X-IG-WWW-Claim': this.wwwClaim || '0',
+                'Accept': '*/*',
+                ...(csrf ? { 'X-CSRFToken': csrf } : {}),
+                ...options.headers
+            };
             const attempts = method === 'GET' ? 3 : 1;
             for (let attempt = 0; attempt < attempts; attempt++) {
                 this.assertAccount(accountId);
@@ -854,6 +977,8 @@
                 try {
                     const res = await fetchFn(target.href, { method, headers, credentials: 'include',
                         body: options.body ?? options.data, signal: controller.signal });
+                    const newClaim = res.headers?.get('x-ig-www-claim');
+                    if (newClaim) this.wwwClaim = newClaim;
                     const text = await res.text();
                     this.assertAccount(accountId);
                     if (options.signal?.aborted) throw new DOMException('หยุดการทำงานแล้ว', 'AbortError');
@@ -903,11 +1028,11 @@
             if (!csrf) throw this.error('ไม่พบ CSRF token กรุณารีเฟรช Instagram', 'AUTH');
 
             const candidateRoutes = [
-                { url: `/web/friendships/${uid}/unfollow/`, headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'x-csrftoken': csrf } },
-                { url: `/api/v1/web/friendships/${uid}/unfollow/`, headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'x-csrftoken': csrf } },
+                { url: `/web/friendships/${uid}/unfollow/`, headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
+                { url: `/api/v1/web/friendships/${uid}/unfollow/`, headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
                 {
                     url: `/api/v1/friendships/destroy/${uid}/`,
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'x-csrftoken': csrf },
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                     body: new URLSearchParams({ user_id: uid, _uid: accountId, _csrftoken: csrf }).toString()
                 }
             ];
@@ -994,8 +1119,19 @@
                     const before = all.length;
                     for (const user of data.users) {
                         const id = String(user?.id || user?.pk_id || user?.pk || '');
-                        if (!/^\d+$/.test(id)) throw new Error('Invalid relationship user ID');
-                        if (!seenUsers.has(id)) { seenUsers.add(id); all.push(user); }
+                        if (!/^\d+$/.test(id)) continue;
+                        if (!seenUsers.has(id)) {
+                            seenUsers.add(id);
+                            all.push({
+                                id,
+                                username: user.username || '',
+                                full_name: user.full_name || '',
+                                profile_pic_url: user.profile_pic_url || '',
+                                is_verified: Boolean(user.is_verified),
+                                is_private: Boolean(user.is_private),
+                                has_anonymous_profile_picture: Boolean(user.has_anonymous_profile_picture)
+                            });
+                        }
                     }
                     all.pagesFetched++;
                     onProgress?.(all.length, all.pagesFetched, null);
@@ -1007,8 +1143,8 @@
                     if (all.pagesFetched >= limit) throw new Error(`สแกนถึงขีดจำกัด ${limit} หน้า ข้อมูลยังไม่ครบ`);
                     seenCursors.add(next);
                     cursor = next;
-                    // Yield between pages and honor Stop without waiting through a long pause.
-                    const pause = all.pagesFetched % 5 === 0 ? 5000 : 1000;
+                    // Yield between pages and honor Stop without triggering automated activity detection
+                    const pause = all.pagesFetched % 4 === 0 ? (4500 + Math.floor(Math.random() * 2000)) : (2200 + Math.floor(Math.random() * 1200));
                     for (let ms = 0; ms < pause && !STATE.stopScanFlag; ms += 250) await sleep(250);
                 }
             } catch (err) {
@@ -1075,11 +1211,47 @@
             } catch (_) {}
             return null;
         }
+
+        static async fetchUserLastPost(userId, options = {}) {
+            const uid = String(userId || '');
+            if (!/^\d+$/.test(uid)) throw new Error('Invalid user ID');
+            const accountId = STATE.relationshipAccountId || this.getCookie('ds_user_id');
+            this.assertAccount(accountId);
+            const data = await this.request(`/api/v1/feed/user/${uid}/?count=1`, { ...options, accountId });
+            const item = (data?.items || [])[0];
+            return {
+                has_posts: Boolean(item),
+                last_taken_at: item?.taken_at || null,
+                total_posts: data?.num_results ?? (item ? 1 : 0)
+            };
+        }
     }
 
     /* ==========================================================================
        4. CONTROLLER & STATE
        ========================================================================== */
+
+    const DEFAULT_PREFS = {
+        stealthStory: true,
+        cleanFeed: true,
+        quickDownloadFeed: true,
+        quickDownloadStory: true,
+        inactiveThresholdDays: 180
+    };
+
+    function loadPrefs() {
+        try {
+            const raw = localStorage.getItem('maxpland_prefs');
+            if (raw) return { ...DEFAULT_PREFS, ...JSON.parse(raw) };
+        } catch (_) {}
+        return { ...DEFAULT_PREFS };
+    }
+
+    function savePrefs(prefs) {
+        try {
+            localStorage.setItem('maxpland_prefs', JSON.stringify(prefs));
+        } catch (_) {}
+    }
 
     const STATE = {
         currentUser: { id: null, username: null },
@@ -1090,6 +1262,9 @@
         mutual: [],
         lostFollowers: [],
         ghostFollowers: [],
+        inactiveFollowing: [],
+        isScanningInactive: false,
+        stopInactiveScanFlag: false,
         whitelist: new Map(),
         selectedIds: new Set(),
         isScanning: false,
@@ -1106,8 +1281,118 @@
             excludeNoAvatar: false,
             excludeWhitelist: false
         },
-        scanStartTime: 0
+        scanStartTime: 0,
+        prefs: loadPrefs()
     };
+
+    // STEALTH STORY SEEN INTERCEPTOR (Ponytail: Stealth Minimal & Native Masked)
+    function installStorySeenInterceptor() {
+        try {
+            const win = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
+            const hookSym = Symbol.for('mp_seen_hooked');
+            if (win[hookSym]) return;
+            win[hookSym] = true;
+
+            if (typeof win.fetch === 'function') {
+                const rawFetch = win.fetch;
+                const stealthFetch = function(...args) {
+                    const url = typeof args[0] === 'string' ? args[0] : (args[0]?.url || '');
+                    if (STATE.prefs?.stealthStory && (url.includes('/stories/reel/seen') || url.includes('/api/v1/stories/reel/seen'))) {
+                        return Promise.resolve(new Response(JSON.stringify({ status: 'ok' }), {
+                            status: 200,
+                            headers: { 'Content-Type': 'application/json' }
+                        }));
+                    }
+                    return rawFetch.apply(this, args);
+                };
+
+                // ponytail: mask stealthFetch as native code to evade falco/bd.js bot detectors
+                try {
+                    Object.defineProperty(stealthFetch, 'name', { value: rawFetch.name || 'fetch' });
+                    Object.defineProperty(stealthFetch, 'length', { value: rawFetch.length || 1 });
+                    const origToString = Function.prototype.toString;
+                    stealthFetch.toString = function() {
+                        return this === stealthFetch ? origToString.call(rawFetch) : origToString.call(this);
+                    };
+                } catch (_) {}
+
+                win.fetch = stealthFetch;
+            }
+        } catch (_) {}
+    }
+    installStorySeenInterceptor();
+
+    // CLEAN FEED MODE CONTROLLER
+    let cleanFeedObserver = null;
+    function applyCleanFeedMode() {
+        const isEnabled = Boolean(STATE.prefs?.cleanFeed);
+        let styleTag = document.getElementById('maxpland-clean-feed-style');
+
+        if (!isEnabled) {
+            if (styleTag) styleTag.remove();
+            if (cleanFeedObserver) {
+                cleanFeedObserver.disconnect();
+                cleanFeedObserver = null;
+            }
+            document.querySelectorAll('article[data-mp-hidden-ad="true"]').forEach(el => {
+                delete el.dataset.mpHiddenAd;
+            });
+            return;
+        }
+
+        if (!styleTag) {
+            styleTag = document.createElement('style');
+            styleTag.id = 'maxpland-clean-feed-style';
+            // ponytail: avoid display:none layout collapse which causes browser scroll-anchor to jump to top (0, 0)
+            styleTag.textContent = `
+                article:has(a[href*="/ads/ig_redirect/"]),
+                article:has(a[href*="/ads/about/"]),
+                article:has(a[href*="facebook.com/ads/"]),
+                article[data-mp-hidden-ad="true"] {
+                    visibility: hidden !important;
+                    height: 0 !important;
+                    min-height: 0 !important;
+                    max-height: 0 !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    border: none !important;
+                    overflow: hidden !important;
+                    overflow-anchor: none !important;
+                    pointer-events: none !important;
+                    opacity: 0 !important;
+                }
+            `;
+            (document.head || document.documentElement).appendChild(styleTag);
+        }
+
+        const scanArticles = () => {
+            if (!STATE.prefs?.cleanFeed) return;
+            const AD_KEYWORDS = ['sponsored', 'ได้รับการสนับสนุน', 'suggested for you', 'แนะนำสำหรับคุณ'];
+            const articles = document.querySelectorAll('article:not([data-mp-hidden-ad])');
+            for (const article of articles) {
+                const header = article.querySelector('header');
+                const text = (header ? header.textContent : (article.textContent || '').slice(0, 300)).toLowerCase();
+                const isAd = AD_KEYWORDS.some(kw => text.includes(kw));
+                if (isAd) {
+                    article.dataset.mpHiddenAd = 'true';
+                }
+            }
+        };
+
+        scanArticles();
+
+        if (!cleanFeedObserver) {
+            let debounceTimer = null;
+            cleanFeedObserver = new MutationObserver(() => {
+                if (debounceTimer) return;
+                debounceTimer = setTimeout(() => {
+                    debounceTimer = null;
+                    scanArticles();
+                }, 150);
+            });
+            cleanFeedObserver.observe(document.body || document.documentElement, { childList: true, subtree: true });
+        }
+    }
 
     /* ==========================================================================
        5. UI BUILDER (Mini Draggable Circle & Clean Precision Modal)
@@ -1165,8 +1450,11 @@
             </div>
 
             <nav class="maxpland-tabs" role="tablist" aria-label="เครื่องมือ MaxPland">
-                <button class="maxpland-tab-btn active" data-tab="relationship">${ICONS.USERS} ผู้ติดตาม & Unfollow</button>
-                <button class="maxpland-tab-btn" data-tab="vault">${ICONS.DOWNLOAD} ดาวน์โหลดมีเดีย</button>
+                <button class="maxpland-tab-btn active" data-tab="relationship">${ICONS.USERS} ผู้ติดตาม & เลิกฟอล</button>
+                <button class="maxpland-tab-btn" data-tab="health">${ICONS.ANALYTICS} สุขภาพบัญชี & สถิติ</button>
+                <button class="maxpland-tab-btn" data-tab="features">${ICONS.FEATURES} แผงควบคุมฟีเจอร์</button>
+                <button class="maxpland-tab-btn" data-tab="settings">${ICONS.SETTINGS} การตั้งค่าระบบ</button>
+                <button class="maxpland-tab-btn" data-tab="vault">${ICONS.DOWNLOAD} คลังดาวน์โหลด</button>
             </nav>
 
             <div class="maxpland-progress-container" id="maxpland-global-progress">
@@ -1235,6 +1523,9 @@
                             <button class="maxpland-pill-btn" data-filter="ghost">
                                 👻 แอคหลุม <span class="maxpland-pill-count" id="pill-count-ghost">-</span>
                             </button>
+                            <button class="maxpland-pill-btn" data-filter="inactive">
+                                ⏱️ แอคดอง <span class="maxpland-pill-count" id="pill-count-inactive">-</span>
+                            </button>
                             <button class="maxpland-pill-btn" data-filter="whitelist">
                                 ⭐ Whitelist <span class="maxpland-pill-count" id="pill-count-white">-</span>
                             </button>
@@ -1279,6 +1570,9 @@
                             <button class="maxpland-btn-primary" id="maxpland-btn-scan-relationships">
                                 ${ICONS.USERS} เริ่มสแกนผู้ติดตาม
                             </button>
+                            <button class="maxpland-btn-secondary" id="maxpland-btn-scan-inactive" title="ตรวจหาผู้ใช้ใน Following ที่ไม่มีความเคลื่อนไหวนานเกินเกณฑ์" style="padding:6px 10px;font-size:12px;">
+                                ${ICONS.CLOCK} ตรวจจับแอคดอง
+                            </button>
                             <div style="display:flex;gap:6px;" id="maxpland-whitelist-tools">
                                 <button class="maxpland-btn-secondary" id="maxpland-btn-backup-whitelist" title="ส่งออกข้อมูล Whitelist สำรองเป็นไฟล์ JSON" style="padding:6px 10px;font-size:12px;">
                                     ${ICONS.BACKUP} สำรอง Whitelist
@@ -1314,7 +1608,191 @@
                     </div>
                 </div>
 
-                <!-- TAB 2: Media Vault -->
+                <!-- TAB 2: Account Health Dashboard -->
+                <div class="maxpland-tab-content" id="tab-health">
+                    <div style="margin-bottom:14px;">
+                        <h2 style="font-size:15px;font-weight:700;margin:0 0 4px;">สรุปสุขภาพบัญชีและสถิติ (Account Health Dashboard)</h2>
+                        <p style="font-size:12px;color:var(--mp-text-muted);margin:0;">ประมวลผลสถิติและอัตราส่วนความสัมพันธ์จากฐานข้อมูล Snapshot ในเครื่อง (Zero Network Overhead)</p>
+                    </div>
+
+                    <div class="maxpland-health-hero">
+                        <div class="maxpland-health-card">
+                            <div class="maxpland-health-title">อัตราส่วนผู้ติดตาม (Follower Ratio)</div>
+                            <div class="maxpland-health-val" id="health-ratio-val">-</div>
+                            <div id="health-ratio-badge" class="maxpland-health-badge" style="background:var(--mp-cyan-bg);color:var(--mp-cyan);">กำลังรอข้อมูลสแกน</div>
+                        </div>
+                        <div class="maxpland-health-card">
+                            <div class="maxpland-health-title">ความสัมพันธ์เหนียวแน่น (Mutual Rate)</div>
+                            <div class="maxpland-health-val" id="health-mutual-val">-</div>
+                            <div id="health-mutual-badge" class="maxpland-health-badge" style="background:var(--mp-emerald-bg);color:var(--mp-emerald);">สัดส่วนคนฟอลกลับ</div>
+                        </div>
+                        <div class="maxpland-health-card">
+                            <div class="maxpland-health-title">คนไม่ฟอลกลับ (Unrequited Outbound)</div>
+                            <div class="maxpland-health-val" id="health-notback-val">-</div>
+                            <div id="health-notback-badge" class="maxpland-health-badge" style="background:var(--mp-rose-bg);color:var(--mp-rose);">เราฟอลแต่เขาไม่ฟอล</div>
+                        </div>
+                        <div class="maxpland-health-card">
+                            <div class="maxpland-health-title">ความเสี่ยงแอคหลุม/ร้าง (Ghost Impact)</div>
+                            <div class="maxpland-health-val" id="health-ghost-val">-</div>
+                            <div id="health-ghost-badge" class="maxpland-health-badge" style="background:var(--mp-amber-bg);color:var(--mp-amber);">ไม่มีรูป / บอท</div>
+                        </div>
+                    </div>
+
+                    <!-- Historical Sparkline Chart -->
+                    <div class="maxpland-chart-box">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                            <div>
+                                <span style="font-size:13px;font-weight:700;">📈 แนวโน้มจำนวนผู้ติดตาม (Historical Follower Drift)</span>
+                                <div style="font-size:11.5px;color:var(--mp-text-muted);">บันทึกย้อนหลังจากแต่ละรอบการสแกนใน IndexedDB</div>
+                            </div>
+                            <span id="health-drift-delta" style="font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;"></span>
+                        </div>
+                        <div id="health-chart-container" style="min-height:130px;display:grid;place-items:center;color:var(--mp-text-muted);font-size:12px;">
+                            สแกนผู้ติดตามอย่างน้อย 1 ครั้งเพื่อเริ่มต้นสร้างกราฟแนวโน้ม
+                        </div>
+                    </div>
+
+                    <!-- Health Advice Box -->
+                    <div style="background:var(--mp-bg-card);border:1px solid var(--mp-border-card);border-radius:8px;padding:14px 16px;">
+                        <span style="font-size:13px;font-weight:700;color:#38bdf8;">💡 คำแนะนำด้านสุขภาพบัญชี:</span>
+                        <div id="health-advice-text" style="font-size:12px;color:var(--mp-text-secondary);margin-top:6px;line-height:1.5;">
+                            เริ่มสแกนผู้ติดตามในแท็บแรกเพื่อรับการวิเคราะห์โครงสร้างบัญชีของคุณค่ะ
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 3: Features Control Panel (Switches) -->
+                <div class="maxpland-tab-content" id="tab-features">
+                    <div style="margin-bottom:16px;">
+                        <h2 style="font-size:15px;font-weight:700;margin:0 0 4px;">แผงควบคุมฟีเจอร์ (Feature Controller)</h2>
+                        <p style="font-size:12px;color:var(--mp-text-muted);margin:0;">เปิดหรือปิดการทำงานของแต่ละระบบได้ตามต้องการ การเปลี่ยนแปลงมีผลทันที</p>
+                    </div>
+
+                    <div class="maxpland-feature-card">
+                        <div class="maxpland-feature-info">
+                            <div class="maxpland-feature-title">
+                                ${ICONS.EYE} โหมดแอบส่อง Story เนียน (Stealth Story Viewer)
+                                <span class="maxpland-badge-emerald">แนะนำ</span>
+                            </div>
+                            <div class="maxpland-feature-desc">
+                                ดักสกัดกั้นคำขอ Seen ไปยังเซิร์ฟเวอร์ Instagram 100% ทำให้คุณสามารถเปิดดูสตอรี่ของใครก็ได้โดยที่ชื่อบัญชีของคุณจะไม่ไปปรากฏในรายชื่อผู้เข้าชมของเขา
+                            </div>
+                        </div>
+                        <label class="maxpland-switch" title="เปิด/ปิดโหมดส่องเนียน">
+                            <input type="checkbox" id="pref-switch-stealth-story">
+                            <span class="maxpland-slider"></span>
+                        </label>
+                    </div>
+
+                    <div class="maxpland-feature-card">
+                        <div class="maxpland-feature-info">
+                            <div class="maxpland-feature-title">
+                                ${ICONS.SHIELD} โหมดฟีดสะอาด (Clean Feed Mode)
+                            </div>
+                            <div class="maxpland-feature-desc">
+                                ซ่อนโพสต์โฆษณา "ได้รับการสนับสนุน (Sponsored)" และ "แนะนำสำหรับคุณ (Suggested Posts)" บนหน้าฟีดหลักโดยอัตโนมัติ เพื่อให้เห็นเฉพาะโพสต์จากผู้ที่คุณติดตามจริง ๆ
+                            </div>
+                        </div>
+                        <label class="maxpland-switch" title="เปิด/ปิดโหมดฟีดสะอาด">
+                            <input type="checkbox" id="pref-switch-clean-feed">
+                            <span class="maxpland-slider"></span>
+                        </label>
+                    </div>
+
+                    <div class="maxpland-feature-card">
+                        <div class="maxpland-feature-info">
+                            <div class="maxpland-feature-title">
+                                ${ICONS.DOWNLOAD} ปุ่มดาวน์โหลดมีเดียบนหน้าฟีด (In-Feed Download)
+                            </div>
+                            <div class="maxpland-feature-desc">
+                                แสดงปุ่มดาวน์โหลดรูปภาพ วิดีโอ และอัลบั้ม Carousel ความละเอียดสูงสุดข้างปุ่มบันทึกในทุกโพสต์บนหน้าฟีด
+                            </div>
+                        </div>
+                        <label class="maxpland-switch" title="เปิด/ปิดปุ่มดาวน์โหลดบนฟีด">
+                            <input type="checkbox" id="pref-switch-feed-download">
+                            <span class="maxpland-slider"></span>
+                        </label>
+                    </div>
+
+                    <div class="maxpland-feature-card">
+                        <div class="maxpland-feature-info">
+                            <div class="maxpland-feature-title">
+                                ${ICONS.THUMBNAIL} แถบเครื่องมือดาวน์โหลดสตอรี่ (Story Toolbar)
+                            </div>
+                            <div class="maxpland-feature-desc">
+                                แสดงแถบเครื่องมือลอยที่มุมบนขวาของหน้าสตอรี่สำหรับดาวน์โหลดวิดีโอสตอรี่, ภาพปก, และเปิดแท็บใหม่
+                            </div>
+                        </div>
+                        <label class="maxpland-switch" title="เปิด/ปิดแถบเครื่องมือสตอรี่">
+                            <input type="checkbox" id="pref-switch-story-toolbar">
+                            <span class="maxpland-slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- TAB 4: Settings & Configuration -->
+                <div class="maxpland-tab-content" id="tab-settings">
+                    <div style="margin-bottom:16px;">
+                        <h2 style="font-size:15px;font-weight:700;margin:0 0 4px;">การตั้งค่าและระบบความปลอดภัย (Settings & Safety)</h2>
+                        <p style="font-size:12px;color:var(--mp-text-muted);margin:0;">ปรับแต่งเกณฑ์ตรวจวัด พารามิเตอร์ความปลอดภัย และจัดการข้อมูลสำรอง</p>
+                    </div>
+
+                    <div class="maxpland-settings-group">
+                        <h3 class="maxpland-settings-group-title">${ICONS.CLOCK} เกณฑ์ตรวจจับแอคเคาท์ดอง (Inactive Following Radar)</h3>
+                        <div class="maxpland-settings-row">
+                            <div>
+                                <div style="font-weight:600;font-size:13px;">ระยะเวลาที่ถือว่าดอง/เลิกเล่น</div>
+                                <div style="font-size:11.5px;color:var(--mp-text-muted);">นับจากวันเวลาของโพสต์ล่าสุดที่ผู้ใช้ลงในบัญชี</div>
+                            </div>
+                            <select id="pref-setting-inactive-threshold" class="maxpland-select">
+                                <option value="90">90 วัน (3 เดือน)</option>
+                                <option value="180">180 วัน (6 เดือน - แนะนำ)</option>
+                                <option value="365">365 วัน (1 ปี)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="maxpland-settings-group">
+                        <h3 class="maxpland-settings-group-title">🛡️ ความปลอดภัยและการหน่วงเวลา (Anti-Detection Guard)</h3>
+                        <div class="maxpland-settings-row">
+                            <div>
+                                <div style="font-weight:600;font-size:13px;">หน่วงเวลาการยกเลิกติดตาม (Unfollow Jitter Delay)</div>
+                                <div style="font-size:11.5px;color:var(--mp-text-muted);">สุ่มช่วงเวลาหน่วงระหว่างคำขอ เพื่อเลียนแบบพฤติกรรมมนุษย์และป้องกัน Rate Limit</div>
+                            </div>
+                            <span style="font-size:12px;font-weight:600;color:var(--mp-emerald);">3,000 - 5,000 ms (สุ่มอัตโนมัติ)</span>
+                        </div>
+                        <div class="maxpland-settings-row">
+                            <div>
+                                <div style="font-weight:600;font-size:13px;">ขีดจำกัดหน้าสแกน Following / Followers</div>
+                                <div style="font-size:11.5px;color:var(--mp-text-muted);">จำกัดหน้าสูงสุดต่อรอบเพื่อป้องกันเซสชันการเชื่อมต่อสะดุด</div>
+                            </div>
+                            <span style="font-size:12px;font-weight:600;color:var(--mp-blue);">60 หน้า (3,000 คน) / 250 หน้า (12,500 คน)</span>
+                        </div>
+                    </div>
+
+                    <div class="maxpland-settings-group">
+                        <h3 class="maxpland-settings-group-title">💾 การจัดการข้อมูลสำรองและแคช (Data Vault)</h3>
+                        <div class="maxpland-settings-row">
+                            <div>
+                                <div style="font-weight:600;font-size:13px;">สำรองและกู้คืน Whitelist</div>
+                                <div style="font-size:11.5px;color:var(--mp-text-muted);">ส่งออกหรือนำเข้ารายชื่อบัญชีที่ได้รับการปกป้อง (JSON)</div>
+                            </div>
+                            <div style="display:flex;gap:6px;">
+                                <button type="button" class="maxpland-btn-secondary" id="setting-btn-backup-whitelist" style="padding:5px 10px;font-size:12px;">${ICONS.BACKUP} สำรอง Whitelist</button>
+                                <button type="button" class="maxpland-btn-secondary" id="setting-btn-restore-whitelist" style="padding:5px 10px;font-size:12px;">${ICONS.RESTORE} กู้คืน Whitelist</button>
+                            </div>
+                        </div>
+                        <div class="maxpland-settings-row">
+                            <div>
+                                <div style="font-weight:600;font-size:13px;">แคชข้อมูลความเคลื่อนไหว (Activity Cache)</div>
+                                <div style="font-size:11.5px;color:var(--mp-text-muted);">ล้างข้อมูลวันที่โพสต์ล่าสุดที่บันทึกไว้ใน IndexedDB เพื่อบังคับสแกนใหม่ทั้งหมด</div>
+                            </div>
+                            <button type="button" class="maxpland-btn-danger" id="setting-btn-clear-cache" style="padding:5px 10px;font-size:12px;">ล้างแคช Radar</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 5: Media Vault -->
                 <div class="maxpland-tab-content" id="tab-vault">
                     <div style="margin-bottom:12px;">
                         <h2 style="font-size:15px;font-weight:700;margin:0 0 4px;">คลังดาวน์โหลดมีเดีย (Direct Media Downloader)</h2>
@@ -1383,6 +1861,10 @@
             } else {
                 badge.textContent = 'ไม่พบบัญชี (กรุณาล็อกอิน IG)';
             }
+
+            syncFeaturesTab();
+            syncSettingsTab();
+            if (STATE.activeTab === 'health') renderHealthDashboard();
         };
 
         const closeModal = () => {
@@ -1478,6 +1960,9 @@
                 if (target) target.classList.add('active');
                 STATE.activeTab = tab.dataset.tab;
                 if (tab.dataset.tab === 'vault') renderMediaVault();
+                if (tab.dataset.tab === 'health') renderHealthDashboard();
+                if (tab.dataset.tab === 'features') syncFeaturesTab();
+                if (tab.dataset.tab === 'settings') syncSettingsTab();
             });
         });
 
@@ -1571,6 +2056,145 @@
         document.getElementById('maxpland-btn-run-media-queue').addEventListener('click', () => runMediaQueue({ skipExisting: true }));
         document.getElementById('maxpland-btn-run-media-all').addEventListener('click', () => runMediaQueue({ skipExisting: false }));
         document.getElementById('maxpland-btn-refresh-vault').addEventListener('click', renderMediaVault);
+
+        // Feature Switches (Master Toggles)
+        const swStealth = document.getElementById('pref-switch-stealth-story');
+        if (swStealth) {
+            swStealth.addEventListener('change', (e) => {
+                STATE.prefs.stealthStory = e.target.checked;
+                savePrefs(STATE.prefs);
+                showToast(e.target.checked ? 'เปิดโหมดส่องเนียน (ไม่ขึ้น Seen) แล้วค่ะ' : 'ปิดโหมดส่องเนียน');
+            });
+        }
+        const swCleanFeed = document.getElementById('pref-switch-clean-feed');
+        if (swCleanFeed) {
+            swCleanFeed.addEventListener('change', (e) => {
+                STATE.prefs.cleanFeed = e.target.checked;
+                savePrefs(STATE.prefs);
+                applyCleanFeedMode();
+                showToast(e.target.checked ? 'เปิดโหมดฟีดสะอาด ซ่อนโฆษณาแล้วค่ะ' : 'ปิดโหมดฟีดสะอาด');
+            });
+        }
+        const swFeedDl = document.getElementById('pref-switch-feed-download');
+        if (swFeedDl) {
+            swFeedDl.addEventListener('change', (e) => {
+                STATE.prefs.quickDownloadFeed = e.target.checked;
+                savePrefs(STATE.prefs);
+                showToast(e.target.checked ? 'เปิดปุ่มดาวน์โหลดบนฟีดแล้วค่ะ' : 'ปิดปุ่มดาวน์โหลดบนฟีด');
+            });
+        }
+        const swStoryTb = document.getElementById('pref-switch-story-toolbar');
+        if (swStoryTb) {
+            swStoryTb.addEventListener('change', (e) => {
+                STATE.prefs.quickDownloadStory = e.target.checked;
+                savePrefs(STATE.prefs);
+                if (!e.target.checked) {
+                    const bar = document.getElementById('maxpland-story-bar');
+                    if (bar) bar.remove();
+                }
+                showToast(e.target.checked ? 'เปิดแถบเครื่องมือสตอรี่แล้วค่ะ' : 'ปิดแถบเครื่องมือสตอรี่');
+            });
+        }
+
+        // Settings Threshold & Actions
+        const selInactive = document.getElementById('pref-setting-inactive-threshold');
+        if (selInactive) {
+            selInactive.addEventListener('change', (e) => {
+                STATE.prefs.inactiveThresholdDays = Number(e.target.value);
+                savePrefs(STATE.prefs);
+                showToast(`ตั้งเกณฑ์แอคดองเป็น ${e.target.value} วันแล้วค่ะ`);
+            });
+        }
+        const btnSettingBackup = document.getElementById('setting-btn-backup-whitelist');
+        if (btnSettingBackup) btnSettingBackup.addEventListener('click', exportWhitelistBackup);
+        const btnSettingRestore = document.getElementById('setting-btn-restore-whitelist');
+        if (btnSettingRestore) btnSettingRestore.addEventListener('click', () => restoreInput.click());
+        const btnClearCache = document.getElementById('setting-btn-clear-cache');
+        if (btnClearCache) {
+            btnClearCache.addEventListener('click', async () => {
+                if (confirm('คุณต้องการล้างข้อมูลแคชความเคลื่อนไหวทั้งหมดใช่หรือไม่?')) {
+                    await MaxPlandVault.clearActivityCache();
+                    STATE.inactiveFollowing = [];
+                    const countEl = document.getElementById('pill-count-inactive');
+                    if (countEl) countEl.textContent = '-';
+                    showToast('ล้างแคช Radar เรียบร้อยแล้วค่ะ');
+                }
+            });
+        }
+
+        // Inactive Radar Scan Trigger
+        const btnScanInactive = document.getElementById('maxpland-btn-scan-inactive');
+        if (btnScanInactive) btnScanInactive.addEventListener('click', runInactiveScan);
+
+        // ponytail: Native Event Delegation for Relationship List (Zero Memory Leaks & 60fps Search)
+        const relList = document.getElementById('maxpland-relationship-list');
+        if (relList) {
+            relList.addEventListener('change', (e) => {
+                const box = e.target.closest('.user-select-checkbox');
+                if (!box) return;
+                const uid = box.dataset.id;
+                if (box.checked) STATE.selectedIds.add(uid);
+                else STATE.selectedIds.delete(uid);
+                updateBulkActionBar();
+            });
+
+            relList.addEventListener('click', async (e) => {
+                // 1. Star Toggle
+                const star = e.target.closest('.maxpland-star-btn');
+                if (star && !star.disabled) {
+                    const uid = star.dataset.id;
+                    const pool = getFilteredUsers();
+                    const user = pool.find(u => String(u.id || u.pk || u.pk_id) === uid) || STATE.whitelist.get(uid);
+                    if (user) {
+                        star.disabled = true;
+                        try {
+                            const added = await MaxPlandVault.toggleWhitelist(user);
+                            STATE.whitelist = await MaxPlandVault.getWhitelist();
+                            const whiteCountEl = document.getElementById('pill-count-white');
+                            if (whiteCountEl) whiteCountEl.textContent = STATE.whitelist.size.toLocaleString();
+                            if (added) STATE.selectedIds.delete(uid);
+                            showToast(added ? `เพิ่ม @${user.username} ใน Whitelist แล้ว` : `ลบ @${user.username} ออกจาก Whitelist แล้ว`);
+                            updateBulkActionBar();
+                            renderRelationshipList();
+                        } catch (err) { alert(err.message || String(err)); }
+                        finally { star.disabled = false; }
+                    }
+                    return;
+                }
+
+                // 2. Single Unfollow
+                const btn = e.target.closest('.maxpland-row-unfollow-btn');
+                if (btn && !btn.disabled) {
+                    if (STATE.isScanning || STATE.isUnfollowing || STATE.scanIncomplete) return;
+                    const uid = btn.dataset.id;
+                    const uname = btn.dataset.user;
+                    if (!confirm(`ยืนยันการเลิกติดตาม (Unfollow) @${uname} หรือไม่?`)) return;
+
+                    STATE.isUnfollowing = true;
+                    btn.disabled = true;
+                    btn.textContent = 'กำลังดำเนินการ...';
+                    try {
+                        await IgBridge.unfollowUser(uid);
+                        showToast(`เลิกติดตาม @${uname} เรียบร้อยแล้ว`);
+                        applyUnfollowResult(uid, uname);
+                        STATE.selectedIds.delete(uid);
+                        const notBackEl = document.getElementById('stat-not-following-back');
+                        if (notBackEl) notBackEl.textContent = STATE.notFollowingBack.length.toLocaleString();
+                        const pillNotEl = document.getElementById('pill-count-not');
+                        if (pillNotEl) pillNotEl.textContent = STATE.notFollowingBack.length.toLocaleString();
+                        updateBulkActionBar();
+                        renderRelationshipList();
+                    } catch (err) {
+                        alert(`เลิกติดตามล้มเหลว: ${err.message || err}`);
+                        btn.disabled = false;
+                        btn.innerHTML = `${ICONS.UNFOLLOW} เลิกติดตาม`;
+                    } finally {
+                        STATE.isUnfollowing = false;
+                    }
+                    return;
+                }
+            });
+        }
     }
 
     function sleep(ms) {
@@ -1821,6 +2445,7 @@
         else if (STATE.relationshipFilter === 'mutual') pool = STATE.mutual;
         else if (STATE.relationshipFilter === 'lost') pool = STATE.lostFollowers;
         else if (STATE.relationshipFilter === 'ghost') pool = STATE.ghostFollowers;
+        else if (STATE.relationshipFilter === 'inactive') pool = STATE.inactiveFollowing;
         else if (STATE.relationshipFilter === 'whitelist') pool = Array.from(STATE.whitelist.values());
 
         return pool.filter(u => {
@@ -1851,6 +2476,7 @@
         else if (STATE.relationshipFilter === 'mutual') { tagClass = 'mutual'; tagText = 'ฟอลทั้งคู่'; }
         else if (STATE.relationshipFilter === 'lost') { tagClass = 'lost'; tagText = 'เลิกฟอล'; }
         else if (STATE.relationshipFilter === 'ghost') { tagClass = 'ghost'; tagText = '👻 แอคหลุม'; }
+        else if (STATE.relationshipFilter === 'inactive') { tagClass = 'ghost'; tagText = '⏱️ แอคดอง'; }
         else if (STATE.relationshipFilter === 'whitelist') { tagClass = 'mutual'; tagText = '⭐ Whitelist'; }
 
         if (STATE.scanIncomplete && STATE.followers.length === 0 && (STATE.relationshipFilter === 'not_following_back' || STATE.relationshipFilter === 'mutual' || STATE.relationshipFilter === 'fans')) {
@@ -1880,6 +2506,10 @@
             const isChecked = STATE.selectedIds.has(uid);
             const avatar = user.profile_pic_url || '';
             const initial = String(user.username || '?').slice(0, 1).toUpperCase();
+            let displayTag = tagText;
+            if (STATE.relationshipFilter === 'inactive' && user.dormant_days !== undefined) {
+                displayTag = typeof user.dormant_days === 'number' ? `⏱️ ดอง ${user.dormant_days} วัน` : `⏱️ ${user.dormant_days}`;
+            }
 
             html += `
                 <div class="maxpland-user-row" data-id="${escapeHtml(uid)}">
@@ -1891,7 +2521,7 @@
                                 <a href="https://www.instagram.com/${encodeURIComponent(user.username || '')}/" target="_blank" rel="noopener noreferrer" class="maxpland-username">${escapeHtml(user.username || 'unknown')}</a>
                                 ${user.is_verified ? `<span title="Verified">${ICONS.VERIFIED}</span>` : ''}
                                 ${user.is_private ? `<span title="Private Account" style="color:var(--mp-text-muted);display:flex;align-items:center;">${ICONS.LOCK}</span>` : ''}
-                                <span class="maxpland-status-tag ${tagClass}">${tagText}</span>
+                                <span class="maxpland-status-tag ${tagClass}">${escapeHtml(displayTag)}</span>
                             </div>
                             <span class="maxpland-fullname">${escapeHtml(user.full_name || '')}</span>
                         </div>
@@ -1903,7 +2533,7 @@
                         <button type="button" class="maxpland-icon-action maxpland-star-btn" data-id="${escapeHtml(uid)}" title="${isWhitelisted ? 'ลบออกจาก Whitelist' : 'เพิ่มใน Whitelist'}">
                             ${isWhitelisted ? ICONS.STAR_FILLED : ICONS.STAR}
                         </button>
-                        ${STATE.relationshipFilter === 'not_following_back' || STATE.relationshipFilter === 'mutual' ? `
+                        ${STATE.relationshipFilter === 'not_following_back' || STATE.relationshipFilter === 'mutual' || STATE.relationshipFilter === 'inactive' ? `
                             <button type="button" class="maxpland-row-unfollow-btn" data-id="${escapeHtml(uid)}" data-user="${escapeHtml(user.username || '')}">
                                 ${ICONS.UNFOLLOW} เลิกติดตาม
                             </button>
@@ -1925,65 +2555,6 @@
             more.onclick = () => { STATE.relationshipLimit += 100; renderRelationshipList(); };
             listEl.append(more);
         }
-
-        // Bind Row Checkbox Change
-        listEl.querySelectorAll('.user-select-checkbox').forEach(box => {
-            box.addEventListener('change', (e) => {
-                const uid = box.dataset.id;
-                if (e.target.checked) STATE.selectedIds.add(uid);
-                else STATE.selectedIds.delete(uid);
-                updateBulkActionBar();
-            });
-        });
-
-        // Bind Star Toggle
-        listEl.querySelectorAll('.maxpland-star-btn').forEach(star => {
-            star.addEventListener('click', async () => {
-                const uid = star.dataset.id;
-                const user = currentPool.find(u => String(u.pk || u.pk_id || u.id) === uid) || STATE.whitelist.get(uid);
-                if (user) {
-                    star.disabled = true;
-                    try {
-                        const added = await MaxPlandVault.toggleWhitelist(user);
-                        STATE.whitelist = await MaxPlandVault.getWhitelist();
-                        document.getElementById('pill-count-white').textContent = STATE.whitelist.size.toLocaleString();
-                        if (added) STATE.selectedIds.delete(uid);
-                        showToast(added ? `เพิ่ม @${user.username} ใน Whitelist แล้ว` : `ลบ @${user.username} ออกจาก Whitelist แล้ว`);
-                        updateBulkActionBar();
-                        renderRelationshipList();
-                    } catch (err) { alert(err.message || String(err)); }
-                    finally { star.disabled = false; }
-                }
-            });
-        });
-
-        // Bind Single Unfollow Button
-        listEl.querySelectorAll('.maxpland-row-unfollow-btn').forEach(btn => {
-            btn.addEventListener('click', async () => {
-                if (STATE.isScanning || STATE.isUnfollowing || STATE.scanIncomplete) return;
-                const uid = btn.dataset.id;
-                const uname = btn.dataset.user;
-                if (!confirm(`ยืนยันการเลิกติดตาม (Unfollow) @${uname} หรือไม่?`)) return;
-
-                STATE.isUnfollowing = true;
-                btn.disabled = true;
-                btn.textContent = 'กำลังดำเนินการ...';
-                try {
-                    await IgBridge.unfollowUser(uid);
-                    showToast(`เลิกติดตาม @${uname} เรียบร้อยแล้ว`);
-                    applyUnfollowResult(uid, uname);
-                    STATE.selectedIds.delete(uid);
-                    document.getElementById('stat-not-following-back').textContent = STATE.notFollowingBack.length.toLocaleString();
-                    document.getElementById('pill-count-not').textContent = STATE.notFollowingBack.length.toLocaleString();
-                    updateBulkActionBar();
-                    renderRelationshipList();
-                } catch (err) {
-                    alert(`เลิกติดตามล้มเหลว: ${err.message || err}`);
-                    btn.disabled = false;
-                    btn.innerHTML = `${ICONS.UNFOLLOW} เลิกติดตาม`;
-                } finally { STATE.isUnfollowing = false; }
-            });
-        });
     }
 
     function applyUnfollowResult(uid, username = '') {
@@ -2253,6 +2824,292 @@
         return downloadResolvedMedia(resolved, options);
     }
 
+    /* ==========================================================================
+       9. HEALTH DASHBOARD, INACTIVE RADAR & SETTINGS SYNC
+       ========================================================================== */
+
+    function syncFeaturesTab() {
+        const el = id => document.getElementById(id);
+        const p = STATE.prefs || {};
+        if (el('pref-switch-stealth-story')) el('pref-switch-stealth-story').checked = Boolean(p.stealthStory);
+        if (el('pref-switch-clean-feed')) el('pref-switch-clean-feed').checked = Boolean(p.cleanFeed);
+        if (el('pref-switch-feed-download')) el('pref-switch-feed-download').checked = Boolean(p.quickDownloadFeed);
+        if (el('pref-switch-story-toolbar')) el('pref-switch-story-toolbar').checked = Boolean(p.quickDownloadStory);
+    }
+
+    function syncSettingsTab() {
+        const el = id => document.getElementById(id);
+        const p = STATE.prefs || {};
+        if (el('pref-setting-inactive-threshold')) el('pref-setting-inactive-threshold').value = String(p.inactiveThresholdDays || 180);
+    }
+
+    async function runInactiveScan() {
+        if (STATE.isScanning || STATE.isUnfollowing || STATE.isScanningInactive) return;
+        if (!STATE.following.length) {
+            alert('กรุณากด "เริ่มสแกนผู้ติดตาม" ในรอบแรกก่อน เพื่อให้ได้รายชื่อ Following มาตรวจความเคลื่อนไหวค่ะ');
+            return;
+        }
+
+        const thresholdDays = Number(STATE.prefs?.inactiveThresholdDays || 180);
+        const thresholdSeconds = thresholdDays * 86400;
+        const nowSec = Math.floor(Date.now() / 1000);
+
+        STATE.isScanningInactive = true;
+        STATE.stopInactiveScanFlag = false;
+        STATE.inactiveFollowing = [];
+
+        const el = id => document.getElementById(id);
+        const progress = el('maxpland-global-progress');
+        const phase = el('maxpland-scan-phase');
+        const countStat = el('maxpland-scan-stat-count');
+        const timerStat = el('maxpland-scan-stat-timer');
+        const fill = el('maxpland-progress-fill');
+        const btn = el('maxpland-btn-scan-inactive');
+
+        if (btn) btn.disabled = true;
+        progress.style.display = 'block';
+        phase.textContent = `[เรดาร์แอคดอง] เริ่มตรวจสอบความเคลื่อนไหว (เกณฑ์ > ${thresholdDays} วัน)...`;
+        fill.style.width = '0%';
+
+        const scanStartTime = Date.now();
+        const timer = setInterval(() => {
+            if (timerStat) timerStat.textContent = `⏱️ ${formatTime(Math.floor((Date.now() - scanStartTime) / 1000))}`;
+        }, 1000);
+
+        try {
+            const pool = [...STATE.following];
+            let checked = 0;
+            let foundInactive = 0;
+            let newFetches = 0;
+            const BATCH_SAFETY_LIMIT = 20; // ponytail: limit un-cached fetches to 20 per run to prevent automated scraping detection
+
+            for (const user of pool) {
+                if (STATE.stopInactiveScanFlag || STATE.stopScanFlag) break;
+
+                const uid = String(user.id || user.pk_id || user.pk || '');
+                if (!uid) continue;
+
+                checked++;
+                const pct = Math.round((checked / pool.length) * 100);
+                fill.style.width = `${pct}%`;
+                phase.textContent = `[เรดาร์แอคดอง] กำลังตรวจ @${user.username || uid} (${checked}/${pool.length})...`;
+                countStat.textContent = `พบแอคดอง: ${foundInactive}`;
+
+                let lastTakenAt = null;
+                let hasPosts = true;
+
+                // 1. Check IndexedDB Cache first
+                const cached = await MaxPlandVault.getUserActivity(uid);
+                const cacheValid = cached && cached.checked_at && (Date.now() - cached.checked_at < 14 * 86400 * 1000);
+
+                if (cacheValid) {
+                    lastTakenAt = cached.last_post_taken_at;
+                    hasPosts = cached.has_posts !== false;
+                } else {
+                    // 2. Fetch with jitter delay
+                    newFetches++;
+                    try {
+                        const info = await IgBridge.fetchUserLastPost(uid);
+                        lastTakenAt = info.last_taken_at;
+                        hasPosts = info.has_posts;
+
+                        await MaxPlandVault.saveUserActivity({
+                            id: uid,
+                            username: user.username || '',
+                            last_post_taken_at: lastTakenAt,
+                            has_posts: hasPosts,
+                            checked_at: Date.now()
+                        });
+                    } catch (err) {
+                        if (err.code === 'RATE_LIMIT') throw err;
+                    }
+
+                    // Respect safety jitter delay (3500 - 6000ms)
+                    const jitter = 3500 + Math.floor(Math.random() * 2500);
+                    for (let ms = 0; ms < jitter && !STATE.stopInactiveScanFlag && !STATE.stopScanFlag; ms += 250) {
+                        await sleep(250);
+                    }
+
+                    if (newFetches >= BATCH_SAFETY_LIMIT) {
+                        phase.textContent = `[เรดาร์แอคดอง] พักเพื่อความปลอดภัย (ตรวจใหม่ครบ ${BATCH_SAFETY_LIMIT} คนแล้ว) กดสแกนต่อได้เลยค่ะ`;
+                        showToast(`พักตรวจชั่วคราวเพื่อความปลอดภัย (${BATCH_SAFETY_LIMIT} คนใหม่/รอบ) สามารถกดตรวจต่อได้ค่ะ`, 5000);
+                        break;
+                    }
+                }
+
+                const isDormant = !hasPosts || (lastTakenAt && (nowSec - lastTakenAt > thresholdSeconds));
+                if (isDormant) {
+                    foundInactive++;
+                    const dormantDays = lastTakenAt ? Math.floor((nowSec - lastTakenAt) / 86400) : 'ไม่เคยโพสต์';
+                    user.dormant_days = dormantDays;
+                    STATE.inactiveFollowing.push(user);
+                }
+            }
+
+            if (el('pill-count-inactive')) el('pill-count-inactive').textContent = STATE.inactiveFollowing.length;
+            phase.textContent = `[เรดาร์แอคดอง] ตรวจสอบเสร็จสิ้น พบแอคดอง ${STATE.inactiveFollowing.length} บัญชี`;
+            showToast(`ตรวจพบแอคเคาท์ดองทั้งหมด ${STATE.inactiveFollowing.length} บัญชีค่ะ`);
+
+            // Switch to inactive filter
+            const pill = document.querySelector('.maxpland-pill-btn[data-filter="inactive"]');
+            if (pill) pill.click();
+
+        } catch (err) {
+            phase.textContent = `[เรดาร์แอคดอง] เกิดข้อผิดพลาด: ${err.message}`;
+            showToast(err.message, 4000);
+        } finally {
+            clearInterval(timer);
+            if (btn) btn.disabled = false;
+            STATE.isScanningInactive = false;
+            setTimeout(() => { progress.style.display = 'none'; }, 3000);
+        }
+    }
+
+    async function renderHealthDashboard() {
+        const el = id => document.getElementById(id);
+        const followerCount = STATE.followers.length;
+        const followingCount = STATE.following.length;
+
+        // 1. Ratio
+        const ratio = followingCount > 0 ? (followerCount / followingCount) : 0;
+        const ratioVal = el('health-ratio-val');
+        const ratioBadge = el('health-ratio-badge');
+        if (ratioVal && ratioBadge) {
+            if (followerCount === 0 && followingCount === 0) {
+                ratioVal.textContent = '-';
+                ratioBadge.textContent = 'กรุณาสแกนผู้ติดตามก่อน';
+                ratioBadge.style.background = 'var(--mp-bg-hover)';
+                ratioBadge.style.color = 'var(--mp-text-secondary)';
+            } else {
+                ratioVal.textContent = `${ratio.toFixed(2)}x`;
+                if (ratio >= 1.5) {
+                    ratioBadge.textContent = '⭐ ผู้มีอิทธิพล / ครีเอเตอร์';
+                    ratioBadge.style.background = 'var(--mp-emerald-bg)';
+                    ratioBadge.style.color = 'var(--mp-emerald)';
+                } else if (ratio >= 0.8) {
+                    ratioBadge.textContent = '⚖️ บัญชีสมดุล (Healthy Balance)';
+                    ratioBadge.style.background = 'var(--mp-cyan-bg)';
+                    ratioBadge.style.color = 'var(--mp-cyan)';
+                } else {
+                    ratioBadge.textContent = '🔍 บัญชีเน้นติดตาม (Consumer heavy)';
+                    ratioBadge.style.background = 'var(--mp-amber-bg)';
+                    ratioBadge.style.color = 'var(--mp-amber)';
+                }
+            }
+        }
+
+        // 2. Mutual Rate
+        const mutualVal = el('health-mutual-val');
+        const mutualBadge = el('health-mutual-badge');
+        if (mutualVal && mutualBadge) {
+            if (followingCount === 0) {
+                mutualVal.textContent = '-';
+                mutualBadge.textContent = 'ยังไม่มีข้อมูล';
+            } else {
+                const rate = Math.round((STATE.mutual.length / followingCount) * 100);
+                mutualVal.textContent = `${rate}%`;
+                mutualBadge.textContent = `${STATE.mutual.length} จาก ${followingCount} คน`;
+            }
+        }
+
+        // 3. Not Back Outbound
+        const notbackVal = el('health-notback-val');
+        const notbackBadge = el('health-notback-badge');
+        if (notbackVal && notbackBadge) {
+            if (followingCount === 0) {
+                notbackVal.textContent = '-';
+                notbackBadge.textContent = 'ยังไม่มีข้อมูล';
+            } else {
+                const rate = Math.round((STATE.notFollowingBack.length / followingCount) * 100);
+                notbackVal.textContent = `${rate}%`;
+                notbackBadge.textContent = `${STATE.notFollowingBack.length} คนไม่ฟอลกลับ`;
+            }
+        }
+
+        // 4. Ghost & Inactive Impact
+        const ghostVal = el('health-ghost-val');
+        const ghostBadge = el('health-ghost-badge');
+        if (ghostVal && ghostBadge) {
+            const totalGhost = STATE.ghostFollowers.length + STATE.inactiveFollowing.length;
+            if (followerCount === 0 && followingCount === 0) {
+                ghostVal.textContent = '-';
+                ghostBadge.textContent = 'ยังไม่มีข้อมูล';
+            } else {
+                const rate = Math.round((totalGhost / (followerCount || 1)) * 100);
+                ghostVal.textContent = `${totalGhost} บัญชี`;
+                ghostBadge.textContent = `แอคหลุม ${STATE.ghostFollowers.length} / แอคดอง ${STATE.inactiveFollowing.length}`;
+            }
+        }
+
+        // 5. Historical Snapshots & Pure SVG Sparkline
+        const chartBox = el('health-chart-container');
+        const deltaLabel = el('health-drift-delta');
+        try {
+            const accountId = STATE.relationshipAccountId || STATE.currentUser?.id;
+            const snapshots = await MaxPlandVault.getAllSnapshots(accountId, 8);
+            if (snapshots.length >= 2) {
+                const sorted = [...snapshots].reverse();
+                const counts = sorted.map(s => s.follower_count || 0);
+                const min = Math.min(...counts);
+                const max = Math.max(...counts);
+                const diff = counts[counts.length - 1] - counts[0];
+
+                if (deltaLabel) {
+                    deltaLabel.textContent = `${diff >= 0 ? '+' : ''}${diff} followers`;
+                    deltaLabel.style.color = diff >= 0 ? 'var(--mp-emerald)' : 'var(--mp-rose)';
+                }
+
+                const w = 700, h = 110;
+                const pad = 24;
+                const range = (max - min) || 1;
+                const points = counts.map((c, i) => {
+                    const x = pad + (i / (counts.length - 1)) * (w - pad * 2);
+                    const y = h - pad - ((c - min) / range) * (h - pad * 2);
+                    return { x, y, val: c, date: new Date(sorted[i].timestamp).toLocaleDateString('th-TH') };
+                });
+
+                const polyline = points.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+                const dots = points.map(p => `
+                    <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4" fill="#38bdf8" stroke="#0b0d10" stroke-width="2">
+                        <title>${p.date}: ${p.val} คน</title>
+                    </circle>
+                    <text x="${p.x.toFixed(1)}" y="${(p.y - 8).toFixed(1)}" font-size="10" fill="#94a3b8" text-anchor="middle">${p.val}</text>
+                `).join('');
+
+                chartBox.innerHTML = `
+                    <svg viewBox="0 0 ${w} ${h}" class="maxpland-sparkline">
+                        <defs>
+                            <linearGradient id="mp-chart-grad" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.3"/>
+                                <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.0"/>
+                            </linearGradient>
+                        </defs>
+                        <polyline fill="none" stroke="#0284c7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" points="${polyline}" />
+                        ${dots}
+                    </svg>
+                `;
+            } else if (snapshots.length === 1) {
+                if (deltaLabel) deltaLabel.textContent = 'บันทึกแล้ว 1 รอบ';
+                chartBox.innerHTML = `<div style="padding:20px;text-align:center;color:var(--mp-text-muted);">บันทึกสแกนแรกเรียบร้อย (${snapshots[0].follower_count} คน) สแกนเพิ่มอีก 1 ครั้งเพื่อดูเส้นกราฟเปรียบเทียบค่ะ</div>`;
+            } else {
+                if (deltaLabel) deltaLabel.textContent = '';
+                chartBox.innerHTML = `<div style="padding:20px;text-align:center;color:var(--mp-text-muted);">ยังไม่มีประวัติ Snapshot กรุณาสแกนผู้ติดตามเพื่อเริ่มต้นค่ะ</div>`;
+            }
+        } catch (_) {}
+
+        // 6. Advice Box
+        const advice = el('health-advice-text');
+        if (advice) {
+            if (STATE.notFollowingBack.length > 50) {
+                advice.textContent = `พบผู้ใช้ที่ไม่ฟอลกลับคุณถึง ${STATE.notFollowingBack.length} บัญชี แนะนำให้ตรวจสอบในแท็บผู้ติดตาม และทยอยเคลียร์บัญชีที่ไม่ได้อยู่ใน Whitelist ออกเพื่อปรับสมดุลบัญชีค่ะ`;
+            } else if (ratio >= 1.0) {
+                advice.textContent = `โครงสร้างบัญชีของคุณอยู่ในเกณฑ์ดีเยี่ยม มีอัตราส่วนผู้ติดตามสูงกว่าคนที่คุณติดตาม (${ratio.toFixed(2)}x) และมีสัดส่วนความสัมพันธ์ที่สมดุลค่ะ`;
+            } else {
+                advice.textContent = `คุณติดตามผู้อื่นมากกว่าจำนวนผู้ติดตาม หากต้องการเพิ่มความคลีน แนะนำให้ใช้ฟังก์ชัน "ตรวจจับแอคดอง" เพื่อเคลียร์บัญชีที่ไม่ได้ลงโพสต์นานเกิน 6 เดือนออกค่ะ`;
+            }
+        }
+    }
+
     async function renderMediaVault() {
         const list = document.getElementById('maxpland-vault-list');
         if (!list) return;
@@ -2328,6 +3185,10 @@
 
     // In-Feed Media Native Action Bar Integration (Zero Vertical Space Waste)
     function injectInFeedDownloadButtons(root = document) {
+        if (STATE.prefs && STATE.prefs.quickDownloadFeed === false) {
+            document.querySelectorAll('.maxpland-action-wrap').forEach(el => el.remove());
+            return;
+        }
         const articles = root instanceof Element && root.matches('article') ? [root] : root.querySelectorAll('article');
         articles.forEach(article => {
             const section = article.querySelector('section');
@@ -2517,6 +3378,12 @@
             return;
         }
 
+        if (STATE.prefs && STATE.prefs.quickDownloadStory === false) {
+            const existing = document.getElementById('maxpland-story-bar');
+            if (existing) existing.remove();
+            return;
+        }
+
         if (document.getElementById('maxpland-story-bar')) return;
 
         const storyContainer = document.querySelector('section:visible') || document.querySelector('div[id^="mount"] section');
@@ -2525,6 +3392,28 @@
         const bar = document.createElement('div');
         bar.id = 'maxpland-story-bar';
         bar.className = 'maxpland-story-tools';
+
+        const stealthBtn = document.createElement('button');
+        stealthBtn.type = 'button';
+        stealthBtn.id = 'maxpland-story-stealth-toggle';
+        stealthBtn.className = 'maxpland-story-btn';
+        const isStealth = STATE.prefs?.stealthStory !== false;
+        stealthBtn.style.background = isStealth ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)';
+        stealthBtn.style.border = `1px solid ${isStealth ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)'}`;
+        stealthBtn.innerHTML = `<span>${isStealth ? '👁️ แอบส่อง: เปิด' : '👁️ แอบส่อง: ปิด'}</span>`;
+        stealthBtn.title = isStealth ? 'โหมดแอบส่องเนียนเปิดอยู่ (ไม่ส่ง Seen)' : 'โหมดแอบส่องเนียนปิดอยู่ (ส่ง Seen ตามปกติ)';
+        stealthBtn.onclick = () => {
+            const next = !(STATE.prefs?.stealthStory !== false);
+            STATE.prefs.stealthStory = next;
+            savePrefs();
+            stealthBtn.style.background = next ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)';
+            stealthBtn.style.border = `1px solid ${next ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)'}`;
+            stealthBtn.innerHTML = `<span>${next ? '👁️ แอบส่อง: เปิด' : '👁️ แอบส่อง: ปิด'}</span>`;
+            stealthBtn.title = next ? 'โหมดแอบส่องเนียนเปิดอยู่ (ไม่ส่ง Seen)' : 'โหมดแอบส่องเนียนปิดอยู่ (ส่ง Seen ตามปกติ)';
+            const modalSwitch = document.getElementById('pref-switch-stealth-story');
+            if (modalSwitch) modalSwitch.checked = next;
+            showToast(next ? 'เปิดโหมดแอบส่องสตอรี่ (ไม่ขึ้น Seen)' : 'ปิดโหมดแอบส่องสตอรี่ (ส่ง Seen ตามปกติ)');
+        };
 
         const dlBtn = document.createElement('button');
         dlBtn.type = 'button';
@@ -2544,7 +3433,7 @@
         newTabBtn.innerHTML = ICONS.EXTERNAL + '<span>เปิดแท็บ</span>';
         newTabBtn.onclick = () => openCurrentStoryMediaTab();
 
-        bar.append(dlBtn, thumbBtn, newTabBtn);
+        bar.append(stealthBtn, dlBtn, thumbBtn, newTabBtn);
         document.body.appendChild(bar);
     }
 
@@ -2628,10 +3517,14 @@
             if (timer) return;
             timer = setTimeout(() => {
                 timer = null;
-                injectInFeedDownloadButtons();
-                injectStoryDownloadTools();
-                injectProfileAvatarBadge();
-            }, 250);
+                const path = location.pathname;
+                if (path.startsWith('/stories/')) {
+                    injectStoryDownloadTools();
+                } else {
+                    injectInFeedDownloadButtons();
+                    injectProfileAvatarBadge();
+                }
+            }, 300);
         });
         observer.observe(document.body, { childList: true, subtree: true });
     }
@@ -2660,6 +3553,9 @@
         } catch (err) {
             console.warn('[MaxPland] Local vault unavailable', err);
         }
+
+        installStorySeenInterceptor();
+        applyCleanFeedMode();
 
         injectInFeedDownloadButtons();
         injectStoryDownloadTools();

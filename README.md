@@ -1,19 +1,20 @@
 <div align="center">
 
-  <h1>⚡ IG MaxPland</h1>
-  <p><strong>The Precision Relationship Scanner & Full-Resolution Media Downloader for Instagram Web</strong></p>
-  <p><em>Engineered for speed, privacy, and safety. Pure Vanilla JavaScript · Zero External Dependencies.</em></p>
+  <h1>⚡ IG MaxPland <sub style="font-size: 14px; color: #38bdf8;">v2.6.0</sub></h1>
+  <p><strong>The Definitive Relationship Intelligence Suite & Precision Media Downloader for Instagram Web</strong></p>
+  <p><em>Engineered for raw speed, zero-footprint privacy, and stealth anti-detection. Pure Vanilla JavaScript · Zero Dependencies.</em></p>
 
   <p>
-    <a href="#-installation"><img src="https://img.shields.io/badge/Install-Userscript-0284c7?style=for-the-badge&logo=tampermonkey&logoColor=white" alt="Install Userscript" /></a>
-    <a href="https://github.com/Stxyu-p/ig-maxpland/releases"><img src="https://img.shields.io/badge/Release-v2.5.0-10b981?style=for-the-badge" alt="Version 2.5.0" /></a>
+    <a href="#-one-click-installation"><img src="https://img.shields.io/badge/Install-Userscript%20v2.6.0-0284c7?style=for-the-badge&logo=tampermonkey&logoColor=white" alt="Install Userscript" /></a>
+    <a href="https://github.com/Stxyu-p/ig-maxpland/releases"><img src="https://img.shields.io/badge/Release-v2.6.0-10b981?style=for-the-badge" alt="Version 2.6.0" /></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-f59e0b?style=for-the-badge" alt="MIT License" /></a>
   </p>
 
   <p>
     <img src="https://img.shields.io/badge/Dependencies-Zero-success?style=flat-square" alt="Zero Dependencies" />
-    <img src="https://img.shields.io/badge/Storage-IndexedDB%20Vault-blue?style=flat-square" alt="IndexedDB" />
-    <img src="https://img.shields.io/badge/Anti--Detection-Smart%20Rate%20Limiting-purple?style=flat-square" alt="Anti Detection" />
+    <img src="https://img.shields.io/badge/Engine-Vanilla%20JS%2060fps-cyan?style=flat-square" alt="Vanilla Engine" />
+    <img src="https://img.shields.io/badge/Storage-IndexedDB%20Vault%20v6-blue?style=flat-square" alt="IndexedDB Vault" />
+    <img src="https://img.shields.io/badge/Anti--Detection-Native%20Masking%20%2B%20Jitter-purple?style=flat-square" alt="Anti Detection" />
     <img src="https://img.shields.io/badge/Platform-Instagram%20Web-E4405F?style=flat-square&logo=instagram&logoColor=white" alt="Instagram" />
   </p>
 
@@ -21,143 +22,187 @@
 
 ---
 
-## 🌟 Why IG MaxPland?
+## 🌟 What makes IG MaxPland v2.6.0 Different?
 
-Most Instagram downloaders or follower trackers are bloated, inject ads, send your session tokens to unknown remote servers, or rely on clunky third-party APIs that trigger immediate Instagram rate limits and account checkpoint verifications.
+Most Instagram browser extensions inject intrusive popups, harvest your session tokens to remote servers, or spam rapid queries that trigger Instagram account checkpoints and rate limits.
 
-**IG MaxPland is built completely different:**
-- 🛡️ **100% Client-Side**: Runs exclusively in your browser context. Zero external backend servers. Zero telemetry.
-- ⚡ **Direct Native Requests**: Communicates directly through Instagram's internal Web REST gateway utilizing your active browser session (`ds_user_id` + `csrftoken`).
-- 🛑 **Paranoid Anti-Detection Engine**: Randomized exponential backoffs, safety page limits, and an automated 3–5 second human-mimicking pause during bulk unfollow operations.
-- 🗄️ **Persistent Local Vault**: Built on browser IndexedDB to preserve follower history snapshots and media download history without cloud storage.
+**IG MaxPland is built on five strict engineering principles:**
+1. 🛡️ **100% Client-Side Private**: Zero external servers, zero analytics, and zero tracking. All processing happens entirely inside your browser.
+2. 👁️ **Stealth Story Viewing**: Intercepts Instagram seen beacons at the network transport layer with native function masking. Watch stories with zero telemetry footprint.
+3. 🧹 **Clean Feed Mode (No Scroll Bounce)**: Strips sponsored ads and suggested clutter from your feed using zero-height layout preservation and `overflow-anchor: none` to keep scrolling 100% buttery smooth.
+4. ⏱️ **Inactive Following Radar**: Scans your following list to detect dormant accounts that haven't posted in 3, 6, 12, or 24 months, complete with batch safety limits (20 users/batch).
+5. 📊 **Account Health Dashboard**: Evaluates your account structure, mutual ratio, follower-to-following balance, and historical growth with embedded SVG sparklines.
+
+---
+
+## 🚀 Highlight Features at a Glance
+
+```
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                                 ⚡ IG MAXPLAND STUDIO                                  │
+├──────────────────────────┬──────────────────────────┬──────────────────────────────────┤
+│ 👁️ Stealth Story Viewer │ 🧹 Clean Feed Mode       │ ⏱️ Inactive Following Radar     │
+│ Watch stories 100%       │ Zero ads, zero sponsored │ Detect accounts dormant for      │
+│ anonymously without      │ posts, zero scroll-jump  │ 3-24 months with safe batching   │
+│ triggering seen beacons  │ layout collapse          │                                  │
+├──────────────────────────┼──────────────────────────┼──────────────────────────────────┤
+│ 📊 Account Health Audit  │ 📥 Precision Downloader  │ 🛡️ Anti-Detection Hardening      │
+│ Real-time mutual ratios, │ In-feed HD downloads for │ Native header parity, jitter     │
+│ ghost impact, and growth │ photos, videos, stories, │ delays, and zero bot signatures  │
+│ history sparklines       │ carousels & full avatars │                                  │
+└──────────────────────────┴──────────────────────────┴──────────────────────────────────┘
+```
 
 ---
 
 ## 📊 Feature Comparison
 
-| Feature | Generic Web Scrapers | Typical IG Chrome Extensions | ⚡ **IG MaxPland** |
+| Capability | Generic Scrapers | Common IG Extensions | ⚡ **IG MaxPland v2.6.0** |
 | :--- | :---: | :---: | :---: |
-| **Privacy & Security** | ❌ Sends data to third parties | ⚠️ Requires full tab access / ads | ✅ **100% Local (Zero Analytics)** |
-| **Login Security** | ❌ Asks for password | ⚠️ Session hijacking risk | ✅ **Uses Existing Session Cookies** |
-| **Follower Tracking** | ❌ None | ⚠️ Shallow diffing | ✅ **Snapshot History & Lost Follower Diff** |
-| **Unfollow Protection** | ❌ None | ❌ None | ✅ **Whitelist + JSON Backup/Restore** |
-| **Bulk Unfollow Safety** | ❌ Rapid (Triggers ban) | ❌ Rapid spam | ✅ **3–5s Randomized Safe Jitter** |
-| **Carousel Download** | ⚠️ Low-res or manual | ⚠️ Heavy ZIP compression | ✅ **Direct High-Speed HD Batching** |
-| **Avatar Grabber** | ❌ None | ⚠️ Low-res thumbnail | ✅ **Direct Uncompressed HD Badge** |
-| **External Dependencies** | ❌ Heavy (jQuery/Cloud APIs) | ❌ Bloated runtime | ✅ **Zero (`@require` is unused)** |
+| **Privacy & Security** | ❌ Sends data to third parties | ⚠️ Requires full tab access | ✅ **100% Local (Zero Analytics)** |
+| **Login Credential Safety** | ❌ Prompts for password | ⚠️ Session hijacking risk | ✅ **Zero Credentials Asked (Session Native)** |
+| **Stealth Story Mode** | ❌ Not available | ⚠️ Leaks seen beacons | ✅ **100% Intercepted + Masked Function** |
+| **Feed Clean Mode** | ❌ None | ⚠️ Freezes/crashes page | ✅ **Zero-Height Layout & No Scroll Bounce** |
+| **Inactive Account Radar** | ❌ None | ❌ None | ✅ **Safe 20/batch Deep Post Timestamps** |
+| **Account Health Analytics**| ❌ None | ⚠️ Cloud-based subscription | ✅ **Local Snapshot Diff & SVG Sparklines** |
+| **Follower Tracking** | ❌ None | ⚠️ Shallow diffing | ✅ **IndexedDB Historical Snapshot Diff** |
+| **Unfollow Protection** | ❌ None | ❌ None | ✅ **Protected Whitelist + JSON Backup** |
+| **Unfollow Safety Pacing** | ❌ Rapid spam (Ban risk) | ❌ Automated spamming | ✅ **3,000–5,000ms Randomized Jitter** |
+| **Media Downloads** | ⚠️ Low-res or watermarked | ⚠️ Heavy memory-leaking ZIP | ✅ **Direct 1-Click Stream to Disk** |
+| **External Dependencies** | ❌ Heavy (jQuery/Lodash) | ❌ Bloated runtime | ✅ **Zero (`@require` is unused)** |
 
 ---
 
-## 🚀 Key Modules & Architecture
+## 🧩 Architectural Overview
 
 ```mermaid
 graph TD
-    A[Instagram Web UI] -->|Inject Controls| B(IG MaxPland Studio)
+    A[Instagram Web UI] -->|Inject Floating Launcher| B(IG MaxPland Studio)
     B --> C{Core Engine}
-    C -->|Module 1| D[Relationship Intelligence]
-    C -->|Module 2| E[Safety Unfollow Queue]
-    C -->|Module 3| F[Direct Media Engine]
-    C -->|Module 4| G[IndexedDB Vault]
+    C -->|Tab 1| D[Relationship Intelligence]
+    C -->|Tab 2| E[Account Health Dashboard]
+    C -->|Tab 3| F[Feature Controller & Toggles]
+    C -->|Tab 4| G[Settings & Safety Configuration]
+    C -->|Tab 5| H[Media Vault & Downloader]
     
-    D -->|Scans| H[Not Following Back / Fans / Mutuals / Ghost]
-    D -->|Historical Snapshots| G
-    E -->|Safe 3-5s Delays| I[Anti-Detection Unfollow]
-    F -->|In-Feed & Stories| J[One-Click Full HD Downloads]
-    G -->|Stores| K[(Snapshots, Whitelist, Download History)]
+    D -->|Scans| I[Not Following Back / Fans / Mutuals / Ghost]
+    D -->|Safe Unfollow| J[Anti-Detection Jitter Queue]
+    E -->|Renders| K[Ratio Analytics + SVG Sparkline Trend]
+    F -->|Enforces| L[Stealth Story / Clean Feed / In-Feed Tools]
+    G -->|Configures| M[Inactive Radar Days / Whitelist Backup]
+    H -->|Direct Downloads| N[High-Resolution Media Pipeline]
+    
+    I & K & M --> O[(IndexedDB Vault v6)]
 ```
 
-### 1. 🔍 Relationship Intelligence & Scanner
-* **Not Following Back**: Instantly detects users who don't follow you back.
-* **Fans**: Lists your loyal followers whom you aren't currently following.
-* **Mutual Connections**: View your reciprocal network.
-* **Lost Follower Detection**: Compares your current follower list against local IndexedDB snapshots to pinpoint exactly who unfollowed you since your last check.
-* **Ghost Account Radar**: Identifies suspicious bot accounts (default avatar, inactive numerical handles).
-* **Advanced Filters**: Toggle on-the-fly to hide Verified users, Private accounts, Whitelisted accounts, or No-Avatar accounts.
-* **Exporting**: Export datasets directly to **CSV**, **JSON**, or copy all active usernames to your clipboard.
+---
 
-### 2. 🛡️ Whitelist & Safety Vault
-* **Protected VIPs**: Mark close friends, family, and key partners with a Star to ensure they can never be unfollowed by mistake.
-* **JSON Backup & Restore**: Download your whitelist configuration as a standalone JSON file and restore it across browsers or computers with zero friction.
+## 🛠️ Deep-Dive Feature Breakdown
 
-### 3. ⏱️ Automated Safe Unfollow Queue
-* **Human-Mimicking Jitter**: Applies dynamic randomized delays (3 to 5 seconds per request) to prevent Instagram rate-limiting flags.
-* **Live Queue Telemetry**: Live progress bar, remaining counts, success/failure tally, and real-time pause timers.
-* **Instant Abort**: Stop the queue immediately at any time with a dedicated cancel button.
+### 1. 👁️ Stealth Story Viewer (Anonymous Mode)
+* **Seen Beacon Interceptor**: Completely traps and blocks outgoing Instagram seen telemetry requests (`/api/v1/stories/reel/seen`, GraphQL story view mutations).
+* **Native Function Masking**: Overrides `fetch` with `Function.prototype.toString` spoofing to display native code signatures, and stores state via `Symbol.for('mp_seen_hooked')` to evade window property scans.
+* **Instant Story Bar Switch**: Toggle stealth mode directly from the floating story toolbar with real-time visual status (`👁️ Stealth: ON / OFF`).
 
-### 4. 📥 Precision HD Media Downloader
-* **In-Feed Native Integration**: Seamlessly injected next to Instagram's bookmark/save button with a sleek dark-glass dropdown menu.
-* **Dynamic Stream Detection**: Intelligently identifies single photos (`.jpg`) vs progressive video streams (`.mp4`) at original upload resolution.
-* **Full Carousel Batching**: Download every slide in a multi-image/video post directly to your device with one click.
-* **1-Click Rapid Download**: Double-click the download button on any post to trigger an instant download without opening the menu.
-* **Story & Highlights Bar**: Floating bottom toolbar on active Instagram Stories for downloading raw video/photos, thumbnails, or opening media streams directly in a new tab.
-* **HD Avatar Badge**: Injected badge on profile headers to fetch and download uncompressed, full-resolution profile pictures.
+### 2. 🧹 Clean Feed Mode (No Scroll Bouncing)
+* **Ad & Suggestion Purge**: Automatically detects and hides sponsored posts (`Sponsored`, `ได้รับการสนับสนุน`, `Suggested for you`, `แนะนำสำหรับคุณ`).
+* **Zero-Height Layout Preservation**: Employs `visibility: hidden`, `height: 0`, and `overflow-anchor: none !important;` instead of `display: none` to preserve Instagram's internal React Virtual Scroll tree and eliminate the viewport jumping to top (`scrollTop: 0`).
+* **Header-Targeted Scanner**: Scans exclusively the post header or first 300 characters for minimal DOM parsing overhead.
+
+### 3. ⏱️ Inactive Following Radar (Dormant Account Detector)
+* **Deep Activity Inspection**: Checks the timestamp of the latest published feed post for every account you follow.
+* **Customizable Inactivity Windows**: Filter accounts that have been dormant for **90 days (3 months)**, **180 days (6 months)**, **365 days (1 year)**, or **730 days (2 years)**.
+* **Batch Safety Guard**: Automatically halts and pauses after inspecting 20 fresh profiles (`BATCH_SAFETY_LIMIT = 20`) with 3.5–6.0s jitter to shield your account from rate limiting.
+* **Persistent Activity Cache**: Caches inspected timestamps in IndexedDB so subsequent scans are instantaneous.
+
+### 4. 📊 Account Health Dashboard & Trend Analytics
+* **Follower / Following Ratio**: Visual badges indicating whether your profile is Creator-heavy, Healthy Balanced, or Consumer-heavy.
+* **Mutual Friendship Rate**: Real-time percentage of reciprocal connections.
+* **Ghost & Inactive Impact**: Aggregated count and health percentage of accounts without avatars or with dormant profiles.
+* **Historical Growth Sparkline**: Clean SVG sparkline tracking historical follower fluctuations across scans without any external charting library.
+* **Strategic Advice**: Actionable tips tailored to your current relationship dynamics.
+
+### 5. 🔍 Relationship Scanner & Batch Unfollower
+* **Categories**: Not Following Back, Fans, Mutuals, Recently Lost (diffed against IndexedDB snapshots), Ghost Accounts, and Inactive Accounts.
+* **Starred Whitelist**: Protect your VIPs, close friends, and creators from accidental unfollowing with 1-click star toggles.
+* **Safe Unfollow Pacing**: Randomized humanized delays (3–5 seconds) with live queue metrics, error recovery, and instant abort capabilities.
+* **Fast Export**: Export clean datasets to CSV, JSON, or copy usernames directly to the clipboard.
+
+### 6. 📥 Precision Media Downloader & Vault
+* **In-Feed Action Menu**: Integrated directly into every feed post beside the bookmark icon for 1-click downloads.
+* **Smart Media Resolving**: Downloads original uncompressed photos, progressive MP4 streams, and full multi-slide carousels.
+* **Story & Avatar Tools**: Floating story toolbar to download active videos or cover images, plus an HD avatar badge on profile pages.
+* **Local Media Vault**: IndexedDB archive of all downloaded media items with direct preview links.
 
 ---
 
-## 💻 Installation
+## 💻 One-Click Installation
 
 ### Step 1: Install a Userscript Manager
-Ensure you have one of the following browser extensions installed:
-* [**Tampermonkey**](https://www.tampermonkey.net/) *(Highly Recommended)*
+Make sure you have an active userscript manager installed in your browser:
+* [**Tampermonkey**](https://www.tampermonkey.net/) *(Recommended)*
 * [**Violentmonkey**](https://violentmonkey.github.io/)
 
-### Step 2: One-Click Script Install
-Choose your preferred language build:
+### Step 2: Choose Your Language Build (v2.6.0)
 
-| Language | Target Edition | Direct Install Link |
+| Edition | Language | Target Audience | Direct Installation Link |
+| :--- | :--- | :--- | :--- |
+| 🌐 **Global Release** | English | Worldwide users | [**👉 Install IG MaxPland (v2.6.0 EN)**](https://raw.githubusercontent.com/Stxyu-p/ig-maxpland/main/ig_maxpland_en.user.js) |
+| 🇹🇭 **Thai Native Edition** | ภาษาไทย | ผู้ใช้ภาษาไทย | [**👉 ติดตั้ง IG MaxPland (v2.6.0 TH)**](https://raw.githubusercontent.com/Stxyu-p/ig-maxpland/main/ig_maxpland.user.js) |
+
+### Step 3: Start Using
+Open [Instagram Web](https://www.instagram.com/) and look for the glowing **MaxPland floating icon** at the bottom-right of your screen!
+
+---
+
+## ⌨️ Shortcuts & Hotkeys
+
+| Trigger / Shortcut | Action | Description |
 | :--- | :--- | :--- |
-| 🌐 **English** | Public Release (Recommended) | [**Click to Install (v2.5.0)**](https://raw.githubusercontent.com/Stxyu-p/ig-maxpland/main/ig_maxpland_en.user.js) |
-| 🇹🇭 **ภาษาไทย** | Thai Native Version | [**Click to Install (v2.4.9)**](https://raw.githubusercontent.com/Stxyu-p/ig-maxpland/main/ig_maxpland.user.js) |
-
-### Step 3: Launch
-Open [instagram.com](https://www.instagram.com/) and look for the glowing **MaxPland circle icon** at the bottom-right of your screen!
-
----
-
-## ⌨️ Shortcuts & Cheat Sheet
-
-| Trigger / Action | Behavior |
-| :--- | :--- |
-| <kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>M</kbd> | Toggle the MaxPland Studio control center |
-| **Floating Circle** *(Bottom-right)* | Click to open Studio, or click and drag anywhere on screen |
-| **Double-Click** *(Feed Download Button)* | Instant one-click direct download of currently viewed media |
-| **Single-Click** *(Feed Download Button)* | Open precision download menu (HD Photo/Video, All Carousel, Open in Tab) |
+| <kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>M</kbd> | **Toggle Studio** | Open or close the MaxPland Control Center modal |
+| **Floating Circle** | **Click / Drag** | Click to open Studio, or click-and-drag to reposition anywhere |
+| **Double-Click Download Button** | **Direct Download** | Instantly downloads the active in-feed media at max resolution |
+| **Single-Click Download Button** | **Precision Menu** | Opens download options (HD Image/Video, All Carousel, Open in Tab) |
+| **Story Stealth Button** | **Toggle Stealth** | Toggle anonymous story viewing directly on the story screen |
 
 ---
 
-## 🔒 Security & Privacy Manifesto
+## 🔒 Security & Defensive Guard Manifesto
 
 > [!IMPORTANT]
-> **Zero Analytics. Zero Telemetry. Zero Remote Servers.**
+> **No Credentials Stored. No Analytics. Zero External Network Requests.**
 
-1. **Session Transparency**: IG MaxPland never prompts for your password. It operates solely through the session cookie (`ds_user_id`) provided by your browser when you log into Instagram.
-2. **Local Storage Guarantee**: Your relationship history, whitelist data, and download logs are saved strictly in your browser's private **IndexedDB database** (`IG_MAXPLAND_VAULT`).
-3. **No External Scripts**: Many userscripts include external scripts via `@require` which can be modified maliciously upstream. IG MaxPland contains **ZERO `@require` dependencies**—all logic is strictly contained inside the single userscript file.
+1. **Native Session Transport**: IG MaxPland never asks for your password. It authenticates solely through your browser's existing Instagram session cookies (`ds_user_id` and `csrftoken`).
+2. **Meta Header Parity**: Requests include legitimate Meta web headers (`X-ASBD-ID: 129477`, dynamic `X-IG-WWW-Claim`), and exclude obsolete bot signatures such as `X-Requested-With: XMLHttpRequest`.
+3. **Local IndexedDB Database**: All relationship snapshots, whitelist configurations, and activity cache reside exclusively on your machine in `IG_MAXPLAND_VAULT`.
+4. **Zero `@require` CDNs**: Free of third-party script vulnerabilities. All code is completely self-contained in one file.
 
 ---
 
 ## ❓ Frequently Asked Questions (FAQ)
 
 <details>
-<summary><b>Q: Will using IG MaxPland get my Instagram account banned?</b></summary>
+<summary><b>Q: How does Stealth Story Viewer keep me anonymous?</b></summary>
 <br>
-IG MaxPland is engineered with strict defensive safety limits:
-- It limits pagination per scan to conservative boundaries.
-- The bulk unfollower includes a mandatory 3–5 second randomized delay between requests.
-- It immediately pauses and alerts you if Instagram returns HTTP 429 (Rate Limit) or a Checkpoint challenge.
-However, we always recommend moderating unfollow actions to under 100–150 accounts per day to respect Meta's automated thresholds.
+When you view a story on Instagram, the browser transmits a "seen" beacon request to Meta's servers. IG MaxPland intercepts and drops these requests before they leave your browser, while returning a mocked 200 OK response to Instagram's frontend so playback is uninterrupted and your account name never appears on the viewer list.
 </details>
 
 <details>
-<summary><b>Q: How does the Lost Follower detection work?</b></summary>
+<summary><b>Q: Why does Clean Feed Mode not jump back to the top?</b></summary>
 <br>
-Every time you run a scan, IG MaxPland saves a snapshot of your follower ID list into IndexedDB. On future scans, it diffs your historical snapshots with your live list to show exactly which accounts unfollowed you since your last check.
+Standard ad blockers use <code>display: none</code>, which collapses elements to 0x0 pixels and disrupts Chromium's scroll-anchoring algorithm. IG MaxPland uses zero-height layout preservation combined with <code>overflow-anchor: none !important;</code>, ensuring the scroll engine maintains the exact viewport position without bouncing.
 </details>
 
 <details>
-<summary><b>Q: Why does the script download files directly instead of packaging a ZIP?</b></summary>
+<summary><b>Q: What are the safe limits for bulk unfollowing?</b></summary>
 <br>
-Generating ZIP archives inside client-side browser memory causes massive RAM spikes, freezes tabs on large carousels, and wastes CPU cycles. Using native <code>GM_download</code> streams each high-definition file directly to your disk instantly without browser lag.
+We recommend limiting bulk unfollows to 50–100 accounts per session, with at least several hours between batches. IG MaxPland enforces a randomized 3–5 second human-mimicking pause between each request to protect your account.
+</details>
+
+<details>
+<summary><b>Q: Can I transfer my Starred Whitelist between devices?</b></summary>
+<br>
+Yes! Go to the <b>Settings</b> tab in MaxPland Studio and click <b>Backup Whitelist</b> to download a JSON file. On your other device or browser, click <b>Restore Whitelist</b> to import it instantly.
 </details>
 
 ---
@@ -169,4 +214,4 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 ```
 Copyright (c) 2026 P Choke & SORA
 ```
-Feel free to fork, customize, and contribute!
+Feel free to star ⭐ the repository, report issues, and suggest enhancements!
