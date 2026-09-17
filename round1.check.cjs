@@ -2,7 +2,8 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const source = fs.readFileSync(__dirname + '/ig_maxpland.user.js', 'utf8');
+const sourcePath = require('node:path').resolve(__dirname, process.argv[2] || 'ig_maxpland.user.js');
+const source = fs.readFileSync(sourcePath, 'utf8');
 const tests = [];
 function test(name, fn) { tests.push([name, fn]); }
 function harness() {
@@ -89,7 +90,7 @@ test('Radar includes item 20 and reports partial completion', async () => {
     await h.runInactiveScan();
     assert.equal(h.STATE.inactiveFollowing.length, 20);
     assert.match(h.document.getElementById('maxpland-scan-phase').textContent, /20\/21/);
-    assert.doesNotMatch(h.document.getElementById('maxpland-scan-phase').textContent, /เสร็จสิ้น/);
+    assert.doesNotMatch(h.document.getElementById('maxpland-scan-phase').textContent, /เสร็จสิ้น|Scan complete/);
 });
 test('Radar restarts after prior Stop and supplies an abort signal', async () => {
     const h = radarHarness(1);
@@ -178,7 +179,7 @@ function analyzeHarness(count) {
 }
 test('Bot-ghost heuristic is a subset of the no-avatar set', () => {
     const h = analyzeHarness(5);
-    const ghostSource = String(require('node:fs').readFileSync(__dirname + '/ig_maxpland.user.js', 'utf8'));
+    const ghostSource = source;
     assert.match(ghostSource, /ghostFollowers: followers\.filter\(u => hasNoAvatar\(u\)\)/);
     assert.doesNotMatch(ghostSource, /hasNoAvatar\(u\) \|\| isSuspiciousBot\(u\)/);
 });
@@ -186,7 +187,7 @@ test('Ghost copy stops promising bot detection', async () => {
     const h = analyzeHarness(5);
     await h.runRelationshipScan();
     const html = String(h.document.getElementById('maxpland-relationship-list').innerHTML);
-    assert.ok(!/บอท/.test(html), 'no bot wording in row tags');
+    assert.ok(!/บอท|\bbots?\b/i.test(html), 'no bot wording in row tags');
 });
 test('Empty result explains no-new-posts, rather than claiming abandoned', async () => {
     const h = analyzeHarness(2);
@@ -203,7 +204,7 @@ test('Tag map drives filter-to-label mapping', async () => {
     assert.match(html, /maxpland-status-tag ghost/);
 });
 test('Whitelist lookup is not rebuilt per row', () => {
-    const src = String(require('node:fs').readFileSync(__dirname + '/ig_maxpland.user.js', 'utf8'));
+    const src = source;
     assert.doesNotMatch(src, /const isWhitelisted = STATE\.whitelist\.has\(uid\) \|\|/, 'per-row rebuild in render/select paths');
     assert.match(src, /isProtectedUser\(uid, uname\)/);
 });
@@ -239,7 +240,7 @@ test('Radar does not cache a response received after cancellation', async () => 
     await h.runInactiveScan();
     assert.equal(saved, false);
     assert.equal(h.STATE.inactiveFollowing.length, 0);
-    assert.match(h.document.getElementById('maxpland-scan-phase').textContent, /หยุด/);
+    assert.match(h.document.getElementById('maxpland-scan-phase').textContent, /หยุด|Stopped/);
 });
 
 test('Video without a stream falls back to thumbnail and is labeled as one', async () => {

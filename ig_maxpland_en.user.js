@@ -677,7 +677,11 @@
                     follower_count: followers.length,
                     following_count: following.length,
                     follower_ids: followers.map(u => String(u.pk || u.pk_id || u.id)),
-                    following_ids: following.map(u => String(u.pk || u.pk_id || u.id))
+                    following_ids: following.map(u => String(u.pk || u.pk_id || u.id)),
+                    // ponytail: separate id->username maps (not one fat blob) so lost-follower
+                    // rows can show real names without any extra API call; add an index when queried.
+                    follower_usernames: Object.fromEntries(followers.map(u => [String(u.pk || u.pk_id || u.id), String(u.username || '')]).filter(pair => pair[1])),
+                    following_usernames: Object.fromEntries(following.map(u => [String(u.pk || u.pk_id || u.id), String(u.username || '')]).filter(pair => pair[1]))
                 };
                 store.put(snap);
                 tx.oncomplete = () => { cleanup(); resolve(snap); };
@@ -1022,6 +1026,8 @@
         static async unfollowUser(userId) {
             const uid = String(userId || '');
             if (!/^\d+$/.test(uid)) throw new Error('Invalid User ID to unfollow');
+            const user = STATE.following.find(u => String(u.id || u.pk_id || u.pk || '') === uid);
+            if (isProtectedUser(uid, user?.username)) throw new Error('This account is in the Whitelist');
             const accountId = STATE.relationshipAccountId || this.getCookie('ds_user_id');
             this.assertAccount(accountId);
             const csrf = this.getCookie('csrftoken');
@@ -1049,15 +1055,14 @@
                         headers: route.headers,
                         body: route.body
                     });
-                    if (res?.status === 'ok' || res?.friendship_status?.following === false || res?.friendship_status !== undefined) {
+                    if (res?.friendship_status?.following === false || (res?.status === 'ok' && res.friendship_status === undefined)) {
                         return true;
                     }
+                    throw this.error('Instagram did not confirm the unfollow. Check the profile before retrying', 'UNCONFIRMED');
                 } catch (err) {
                     lastError = err;
-                    if (err.code === 'RATE_LIMIT' || (err.code === 'AUTH' && err.status === 401) || err.code === 'ACCOUNT_CHANGED') {
-                        throw err;
-                    }
-                    continue;
+                    // Never repeat an ambiguous write or a rejected session on another route.
+                    if (err.code !== 'HTTP' || ![404, 405].includes(err.status)) throw err;
                 }
             }
             throw lastError || new Error('Instagram did not confirm unfollow. Check profile on web.');
@@ -1501,7 +1506,7 @@
                         <div class="maxpland-stat-card card-ghost" data-target-filter="ghost">
                             <span class="maxpland-stat-label">👻 Ghost Accounts</span>
                             <span class="maxpland-stat-value" id="stat-ghost">-</span>
-                            <span class="maxpland-stat-hint">No avatar / inactive bot</span>
+                            <span class="maxpland-stat-hint">No profile picture</span>
                         </div>
                     </div>
 
@@ -1634,7 +1639,7 @@
                         <div class="maxpland-health-card">
                             <div class="maxpland-health-title">Ghost & Inactive Impact</div>
                             <div class="maxpland-health-val" id="health-ghost-val">-</div>
-                            <div id="health-ghost-badge" class="maxpland-health-badge" style="background:var(--mp-amber-bg);color:var(--mp-amber);">No avatar / ghost</div>
+                            <div id="health-ghost-badge" class="maxpland-health-badge" style="background:var(--mp-amber-bg);color:var(--mp-amber);">No profile picture</div>
                         </div>
                     </div>
 
@@ -1819,7 +1824,7 @@
             </div>
 
             <div class="maxpland-footer">
-                <span>MaxPland v2.4 · Clean Minimal Precision (Anti-Slop)</span>
+                <span>MaxPland v2.6.0 · Clean Minimal Precision (Anti-Slop)</span>
                 <span>Toggle <kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>M</kbd></span>
             </div>
         `;
@@ -1868,7 +1873,7 @@
         };
 
         const closeModal = () => {
-            if (STATE.isScanning || STATE.isUnfollowing) {
+            if (STATE.isScanning || STATE.isUnfollowing || STATE.isScanningInactive) {
                 if (!confirm('A task is currently in progress. Do you want to close?')) return;
             }
             overlay.style.display = 'none';
@@ -2028,6 +2033,8 @@
         document.getElementById('maxpland-btn-stop-scan').addEventListener('click', () => {
             STATE.stopScanFlag = true;
             STATE.scanController?.abort();
+            STATE.stopInactiveScanFlag = true;
+            STATE.inactiveController?.abort();
             STATE.stopUnfollowFlag = true;
             document.getElementById('maxpland-scan-phase').textContent = 'Stopping scan as requested...';
         });
@@ -2165,7 +2172,7 @@
                 // 2. Single Unfollow
                 const btn = e.target.closest('.maxpland-row-unfollow-btn');
                 if (btn && !btn.disabled) {
-                    if (STATE.isScanning || STATE.isUnfollowing || STATE.scanIncomplete) return;
+                    if (STATE.isScanning || STATE.isUnfollowing || STATE.isScanningInactive || STATE.scanIncomplete) return;
                     const uid = btn.dataset.id;
                     const uname = btn.dataset.user;
                     if (!confirm(`Are you sure you want to unfollow @${uname}?`)) return;
@@ -2217,6 +2224,19 @@
         let s = String(value ?? '');
         if (/^[\s\x00-\x1f]*[=+\-@]/.test(s)) s = "'" + s;
         return `"${s.replace(/"/g, '""')}"`;
+    }
+
+    function isProtectedUser(uid, username = '') {
+        const id = String(uid);
+        const name = String(username || '').toLowerCase();
+        if (!name) return STATE.whitelist.has(id);
+        if (STATE.whitelistByNameRef !== STATE.whitelist) { // rebuild once per whitelist instance, not per row
+            STATE.whitelistByNameRef = STATE.whitelist;
+            STATE.whitelistByName = new Map([...STATE.whitelist.values()]
+                .filter(w => w.username)
+                .map(w => [String(w.username).toLowerCase(), w]));
+        }
+        return STATE.whitelistByName.has(name) || STATE.whitelist.has(id);
     }
 
     function hasNoAvatar(user) {
@@ -2305,7 +2325,7 @@
        ========================================================================== */
 
     async function runRelationshipScan() {
-        if (STATE.isScanning || STATE.isUnfollowing) return;
+        if (STATE.isScanning || STATE.isUnfollowing || STATE.isScanningInactive) return;
         STATE.isScanning = true;
         STATE.stopScanFlag = false;
         STATE.scanController = new AbortController();
@@ -2398,7 +2418,7 @@
             IgBridge.assertAccount(currentUser.id);
             if (STATE.stopScanFlag) throw new DOMException('Scan aborted by user', 'AbortError');
             const lostFollowers = (prev?.follower_ids || []).filter(id => !followerIdSet.has(String(id))).map(id => ({
-                pk: String(id), id: String(id), username: `user_${id}`, full_name: 'Unfollowed since previous scan', profile_pic_url: ''
+                pk: String(id), id: String(id), username: prev?.follower_usernames?.[String(id)] || prev?.usernames?.[String(id)] || `user_${id}`, full_name: 'Unfollowed since the previous scan', profile_pic_url: ''
             }));
             await MaxPlandVault.saveSnapshot(followers, following, currentUser.id, STATE.scanController.signal);
             IgBridge.assertAccount(currentUser.id);
@@ -2407,7 +2427,7 @@
                 notFollowingBack: following.filter(u => !isFollower(u)),
                 fans: followers.filter(u => !isFollowing(u)),
                 mutual: following.filter(u => isFollower(u)),
-                ghostFollowers: followers.filter(u => hasNoAvatar(u) || isSuspiciousBot(u)) });
+                ghostFollowers: followers.filter(u => hasNoAvatar(u)) });
             for (const [stat, pill, key] of [['not-following-back','not','notFollowingBack'],['fans','fans','fans'],['mutual','mutual','mutual'],['lost','lost','lostFollowers'],['ghost','ghost','ghostFollowers']]) {
                 if (el(`stat-${stat}`)) el(`stat-${stat}`).textContent = STATE[key].length.toLocaleString();
                 if (el(`pill-count-${pill}`)) el(`pill-count-${pill}`).textContent = STATE[key].length.toLocaleString();
@@ -2451,7 +2471,7 @@
         return pool.filter(u => {
             const uid = String(u.id || u.pk_id || u.pk || '');
             const uname = String(u.username || '').toLowerCase();
-            const isWhitelisted = STATE.whitelist.has(uid) || (uname && Array.from(STATE.whitelist.values()).some(w => (w.username || '').toLowerCase() === uname));
+            const isWhitelisted = isProtectedUser(uid, uname);
             if (STATE.subFilters.excludeWhitelist && isWhitelisted) return false;
             if (STATE.subFilters.excludeVerified && u.is_verified) return false;
             if (STATE.subFilters.excludePrivate && u.is_private) return false;
@@ -2502,7 +2522,7 @@
         visibleUsers.forEach(user => {
             const uid = String(user.id || user.pk_id || user.pk || '');
             const uname = String(user.username || '').toLowerCase();
-            const isWhitelisted = STATE.whitelist.has(uid) || (uname && Array.from(STATE.whitelist.values()).some(w => (w.username || '').toLowerCase() === uname));
+            const isWhitelisted = isProtectedUser(uid, uname);
             const isChecked = STATE.selectedIds.has(uid);
             const avatar = user.profile_pic_url || '';
             const initial = String(user.username || '?').slice(0, 1).toUpperCase();
@@ -2514,7 +2534,7 @@
             html += `
                 <div class="maxpland-user-row" data-id="${escapeHtml(uid)}">
                     <div class="maxpland-user-left">
-                        <input type="checkbox" class="maxpland-checkbox user-select-checkbox" data-id="${escapeHtml(uid)}" ${isChecked ? 'checked' : ''} ${isWhitelisted ? 'disabled title="Protected in Whitelist (Safe from unfollow)"' : ''}>
+                        <input type="checkbox" class="maxpland-checkbox user-select-checkbox" data-id="${escapeHtml(uid)}" aria-label="Select @${escapeHtml(user.username || uid)}" ${isChecked ? 'checked' : ''} ${isWhitelisted ? 'disabled title="In Whitelist (protected from unfollow)"' : ''}>
                         ${avatar ? `<img class="maxpland-avatar" src="${escapeHtml(avatar)}" loading="lazy" alt="">` : `<span class="maxpland-avatar">${escapeHtml(initial)}</span>`}
                         <div class="maxpland-user-names">
                             <div class="maxpland-username-wrap">
@@ -2534,7 +2554,7 @@
                             ${isWhitelisted ? ICONS.STAR_FILLED : ICONS.STAR}
                         </button>
                         ${STATE.relationshipFilter === 'not_following_back' || STATE.relationshipFilter === 'mutual' || STATE.relationshipFilter === 'inactive' ? `
-                            <button type="button" class="maxpland-row-unfollow-btn" data-id="${escapeHtml(uid)}" data-user="${escapeHtml(user.username || '')}">
+                            <button type="button" class="maxpland-row-unfollow-btn" data-id="${escapeHtml(uid)}" data-user="${escapeHtml(user.username || '')}" ${isWhitelisted ? 'disabled title="Whitelist"' : ''}>
                                 ${ICONS.UNFOLLOW} Unfollow
                             </button>
                         ` : ''}
@@ -2592,7 +2612,7 @@
         visiblePool.forEach(u => {
             const uid = String(u.id || u.pk_id || u.pk || '');
             const uname = String(u.username || '').toLowerCase();
-            const isWhitelisted = STATE.whitelist.has(uid) || (uname && Array.from(STATE.whitelist.values()).some(w => (w.username || '').toLowerCase() === uname));
+            const isWhitelisted = isProtectedUser(uid, uname);
             if (!isWhitelisted) {
                 STATE.selectedIds.add(uid);
             }
@@ -2606,7 +2626,7 @@
        ========================================================================== */
 
     async function runBatchUnfollow() {
-        if (STATE.isUnfollowing || STATE.isScanning || STATE.scanIncomplete) return;
+        if (STATE.isUnfollowing || STATE.isScanning || STATE.isScanningInactive || STATE.scanIncomplete) return;
         const count = STATE.selectedIds.size;
         if (count === 0) {
             alert('Please select at least one account to unfollow.');
@@ -2614,7 +2634,7 @@
         }
 
         const estSeconds = Math.round(count * ((APP_CONFIG.UNFOLLOW_DELAY_MIN + APP_CONFIG.UNFOLLOW_DELAY_MAX) / 2000));
-        const proceed = confirm(`⚠️ Safety Warning:\nYou are about to unfollow ${count} accounts.\nTo protect your account from bot detection, this will take approx ${Math.ceil(estSeconds / 60)} min (randomized 3-5s per request).\n\nDo you want to proceed?`);
+        const proceed = confirm(`⚠️ Safety warning:\nYou are about to unfollow ${count} accounts\nEstimated duration: ${Math.ceil(estSeconds / 60)} minutes (random delay ${APP_CONFIG.UNFOLLOW_DELAY_MIN / 1000}-${APP_CONFIG.UNFOLLOW_DELAY_MAX / 1000} seconds per account)\n\nStart now?`);
         if (!proceed) return;
 
         STATE.isUnfollowing = true;
@@ -2644,9 +2664,9 @@
                 }
 
                 const uid = idsToUnfollow[i];
-                if (STATE.whitelist.has(uid)) { STATE.selectedIds.delete(uid); continue; }
                 const userObj = STATE.notFollowingBack.find(u => String(u.id || u.pk_id || u.pk || '') === uid)
                     || STATE.following.find(u => String(u.id || u.pk_id || u.pk || '') === uid);
+                if (isProtectedUser(uid, userObj?.username)) { STATE.selectedIds.delete(uid); continue; }
                 const uname = userObj ? `@${userObj.username}` : `UID ${uid}`;
 
                 phaseEl.textContent = `Unfollowing [${i + 1}/${idsToUnfollow.length}]: ${uname}`;
@@ -2781,7 +2801,7 @@
 
         for (const node of nodesToDownload) {
             IgBridge.assertAccount(accountId);
-            const key = `${resolved.shortcode}:${node.index}:media`;
+            const key = `${resolved.shortcode}:${node.id || node.index}:media`;
             if (skipExisting && await MaxPlandVault.hasMedia(key)) {
                 completed.push({ key, status: 'skipped' });
                 continue;
@@ -2799,8 +2819,12 @@
                 const ext = extensionFromUrl(node.progressiveVideoUrl, 'mp4');
                 files.push(await gmDownload(node.progressiveVideoUrl, `${base}.${ext}`));
             } else if (node.imageUrl) {
-                const ext = extensionFromUrl(node.imageUrl, 'jpg');
+                // Video stream unavailable: the thumbnail is stored under its own type
+                // so the next run still retries the real video instead of skipping it.
+                const thumbType = node.mediaType === 'video' ? 'video_thumb' : node.mediaType;
+                const ext = extensionFromUrl(node.imageUrl, node.mediaType === 'video' ? 'jpg' : 'jpg');
                 files.push(await gmDownload(node.imageUrl, `${base}.${ext}`));
+                node.mediaType = thumbType;
             } else {
                 throw new Error(`No downloadable stream for ${resolved.shortcode}`);
             }
@@ -2845,123 +2869,104 @@
 
     async function runInactiveScan() {
         if (STATE.isScanning || STATE.isUnfollowing || STATE.isScanningInactive) return;
-        if (!STATE.following.length) {
-            alert('Please run "Scan Relationships" first to load your Following list.');
+        if (STATE.scanIncomplete || !STATE.following.length) {
+            alert('Complete a relationship scan before checking activity.');
             return;
         }
-
-        const thresholdDays = Number(STATE.prefs?.inactiveThresholdDays || 180);
-        const thresholdSeconds = thresholdDays * 86400;
+        const accountId = STATE.relationshipAccountId;
+        const thresholdSeconds = Number(STATE.prefs?.inactiveThresholdDays || 180) * 86400;
         const nowSec = Math.floor(Date.now() / 1000);
-
+        const pool = [...STATE.following];
         STATE.isScanningInactive = true;
         STATE.stopInactiveScanFlag = false;
+        STATE.stopScanFlag = false;
+        STATE.inactiveController = new AbortController();
+        const signal = STATE.inactiveController.signal;
         STATE.inactiveFollowing = [];
-
+        clearTimeout(STATE.progressHideTimer);
         const el = id => document.getElementById(id);
         const progress = el('maxpland-global-progress');
         const phase = el('maxpland-scan-phase');
-        const countStat = el('maxpland-scan-stat-count');
-        const timerStat = el('maxpland-scan-stat-timer');
-        const fill = el('maxpland-progress-fill');
         const btn = el('maxpland-btn-scan-inactive');
-
-        if (btn) btn.disabled = true;
+        btn.disabled = true;
         progress.style.display = 'block';
-        phase.textContent = `[Inactive Radar] Scanning activity (threshold > ${thresholdDays} days)...`;
-        fill.style.width = '0%';
-
-        const scanStartTime = Date.now();
+        phase.textContent = '[Inactive Radar] Starting scan...';
+        el('maxpland-scan-notice').style.display = 'none';
+        el('maxpland-scan-stat-count').textContent = 'Inactive found: 0';
+        el('maxpland-scan-stat-page').textContent = `Checked: 0/${pool.length}`;
+        el('maxpland-scan-stat-timer').textContent = '⏱️ 00:00';
+        el('maxpland-progress-fill').style.width = '0%';
+        const started = Date.now();
         const timer = setInterval(() => {
-            if (timerStat) timerStat.textContent = `⏱️ ${formatTime(Math.floor((Date.now() - scanStartTime) / 1000))}`;
+            el('maxpland-scan-stat-timer').textContent = `⏱️ ${formatTime(Math.floor((Date.now() - started) / 1000))}`;
         }, 1000);
-
+        let checked = 0, failed = 0, newFetches = 0;
         try {
-            const pool = [...STATE.following];
-            let checked = 0;
-            let foundInactive = 0;
-            let newFetches = 0;
-            const BATCH_SAFETY_LIMIT = 20; // ponytail: limit un-cached fetches to 20 per run to prevent automated scraping detection
-
+            IgBridge.assertAccount(accountId);
             for (const user of pool) {
-                if (STATE.stopInactiveScanFlag || STATE.stopScanFlag) break;
-
+                if (signal.aborted) break;
+                IgBridge.assertAccount(accountId);
                 const uid = String(user.id || user.pk_id || user.pk || '');
-                if (!uid) continue;
-
-                checked++;
-                const pct = Math.round((checked / pool.length) * 100);
-                fill.style.width = `${pct}%`;
-                phase.textContent = `[Inactive Radar] Checking @${user.username || uid} (${checked}/${pool.length})...`;
-                countStat.textContent = `Inactive found: ${foundInactive}`;
-
-                let lastTakenAt = null;
-                let hasPosts = true;
-
-                // 1. Check IndexedDB Cache first
                 const cached = await MaxPlandVault.getUserActivity(uid);
-                const cacheValid = cached && cached.checked_at && (Date.now() - cached.checked_at < 14 * 86400 * 1000);
-
-                if (cacheValid) {
-                    lastTakenAt = cached.last_post_taken_at;
-                    hasPosts = cached.has_posts !== false;
-                } else {
-                    // 2. Fetch with jitter delay
+                if (signal.aborted) break;
+                IgBridge.assertAccount(accountId);
+                const cacheValid = cached?.checked_at && Date.now() - cached.checked_at < 14 * 86400 * 1000;
+                // ponytail: preserve the 20-request ceiling; cached rows need no new request.
+                if (!cacheValid && newFetches >= 20) break;
+                phase.textContent = `[Inactive Radar] Checking @${user.username || uid} (${checked + 1}/${pool.length})...`;
+                let lastTakenAt = cached?.last_post_taken_at;
+                let hasPosts = cached?.has_posts !== false;
+                let known = Boolean(cacheValid);
+                if (!cacheValid) {
                     newFetches++;
                     try {
-                        const info = await IgBridge.fetchUserLastPost(uid);
+                        const info = await IgBridge.fetchUserLastPost(uid, { signal });
+                        if (signal.aborted) break;
+                        IgBridge.assertAccount(accountId);
                         lastTakenAt = info.last_taken_at;
                         hasPosts = info.has_posts;
-
-                        await MaxPlandVault.saveUserActivity({
-                            id: uid,
-                            username: user.username || '',
-                            last_post_taken_at: lastTakenAt,
-                            has_posts: hasPosts,
-                            checked_at: Date.now()
-                        });
+                        known = true;
+                        await MaxPlandVault.saveUserActivity({ id: uid, username: user.username || '',
+                            last_post_taken_at: lastTakenAt, has_posts: hasPosts, checked_at: Date.now() });
                     } catch (err) {
-                        if (err.code === 'RATE_LIMIT') throw err;
-                    }
-
-                    // Respect safety jitter delay (3500 - 6000ms)
-                    const jitter = 3500 + Math.floor(Math.random() * 2500);
-                    for (let ms = 0; ms < jitter && !STATE.stopInactiveScanFlag && !STATE.stopScanFlag; ms += 250) {
-                        await sleep(250);
-                    }
-
-                    if (newFetches >= BATCH_SAFETY_LIMIT) {
-                        phase.textContent = `[Inactive Radar] Safe batch limit reached (${BATCH_SAFETY_LIMIT} accounts). Click to continue.`;
-                        showToast(`Safe batch limit reached (${BATCH_SAFETY_LIMIT}/batch). Click scan to resume.`, 5000);
-                        break;
+                        if (signal.aborted || err.name === 'AbortError' || IgBridge.isSessionError(err)) throw err;
+                        failed++;
+                        known = false;
                     }
                 }
-
-                const isDormant = !hasPosts || (lastTakenAt && (nowSec - lastTakenAt > thresholdSeconds));
-                if (isDormant) {
-                    foundInactive++;
-                    const dormantDays = lastTakenAt ? Math.floor((nowSec - lastTakenAt) / 86400) : 'No posts';
-                    user.dormant_days = dormantDays;
-                    STATE.inactiveFollowing.push(user);
+                if (signal.aborted) break;
+                IgBridge.assertAccount(accountId);
+                checked++;
+                if (known && (!hasPosts || (lastTakenAt && nowSec - lastTakenAt > thresholdSeconds))) {
+                    STATE.inactiveFollowing.push({ ...user,
+                        dormant_days: lastTakenAt ? Math.floor((nowSec - lastTakenAt) / 86400) : 'No recent posts found' });
+                }
+                el('maxpland-progress-fill').style.width = `${Math.round(checked / pool.length * 100)}%`;
+                el('maxpland-scan-stat-page').textContent = `Checked: ${checked}/${pool.length}`;
+                el('maxpland-scan-stat-count').textContent = `Inactive found: ${STATE.inactiveFollowing.length} · Unavailable: ${failed}`;
+                if (!cacheValid && checked < pool.length && newFetches < 20) {
+                    const jitter = 3500 + Math.floor(Math.random() * 2500);
+                    for (let ms = 0; ms < jitter && !signal.aborted; ms += 250) await sleep(250);
                 }
             }
-
-            if (el('pill-count-inactive')) el('pill-count-inactive').textContent = STATE.inactiveFollowing.length;
-            phase.textContent = `[Inactive Radar] Completed. Found ${STATE.inactiveFollowing.length} inactive accounts.`;
-            showToast(`Detected ${STATE.inactiveFollowing.length} inactive following accounts.`);
-
-            // Switch to inactive filter
-            const pill = document.querySelector('.maxpland-pill-btn[data-filter="inactive"]');
-            if (pill) pill.click();
-
+            const state = signal.aborted ? 'Stopped by request' : checked < pool.length ? 'Paused — scan again to continue' : failed ? 'Finished with unavailable results' : 'Scan complete';
+            phase.textContent = `[Inactive Radar] ${state} (${checked}/${pool.length}) · Found ${STATE.inactiveFollowing.length} · Unavailable ${failed}`;
+            showToast(phase.textContent, 5000);
+            if (!signal.aborted && checked === pool.length && !failed) {
+                STATE.progressHideTimer = setTimeout(() => { progress.style.display = 'none'; }, 3000);
+            }
         } catch (err) {
-            phase.textContent = `[Inactive Radar] Error: ${err.message}`;
-            showToast(err.message, 4000);
+            phase.textContent = signal.aborted || err.name === 'AbortError'
+                ? `[Inactive Radar] Stopped by request (${checked}/${pool.length})`
+                : `[Inactive Radar] Stopped: ${err.message} (${checked}/${pool.length})`;
+            showToast(phase.textContent, 4000);
         } finally {
             clearInterval(timer);
-            if (btn) btn.disabled = false;
+            btn.disabled = false;
             STATE.isScanningInactive = false;
-            setTimeout(() => { progress.style.display = 'none'; }, 3000);
+            STATE.inactiveController = null;
+            el('pill-count-inactive').textContent = STATE.inactiveFollowing.length;
+            document.querySelector('.maxpland-pill-btn[data-filter="inactive"]')?.click();
         }
     }
 
@@ -3371,6 +3376,14 @@
     }
 
     // Story & Highlight Tools
+    function visibleStoryElement(selector) {
+        return [...document.querySelectorAll(selector)].find(el => {
+            const rect = el.getBoundingClientRect();
+            return el.checkVisibility({ checkVisibilityCSS: true }) && rect.width > 0 && rect.height > 0
+                && rect.bottom > 0 && rect.top < window.innerHeight && rect.right > 0 && rect.left < window.innerWidth;
+        }) || null;
+    }
+
     function injectStoryDownloadTools() {
         if (!location.pathname.startsWith('/stories/')) {
             const existing = document.getElementById('maxpland-story-bar');
@@ -3386,7 +3399,7 @@
 
         if (document.getElementById('maxpland-story-bar')) return;
 
-        const storyContainer = document.querySelector('section:visible') || document.querySelector('div[id^="mount"] section');
+        const storyContainer = visibleStoryElement('section');
         if (!storyContainer) return;
 
         const bar = document.createElement('div');
@@ -3438,8 +3451,8 @@
     }
 
     async function downloadCurrentStoryMedia(isThumb = false) {
-        const video = document.querySelector('section:visible video, div[id^="mount"] section video');
-        const img = document.querySelector('section:visible img._aa63, section:visible img[crossorigin], div[id^="mount"] section img[referrerpolicy]');
+        const video = visibleStoryElement('section video');
+        const img = visibleStoryElement('section img._aa63, section img[crossorigin], section img[referrerpolicy]');
         const mediaUrl = isThumb ? (img?.currentSrc || img?.src) : (video?.currentSrc || video?.src || img?.currentSrc || img?.src);
 
         if (!mediaUrl) {
@@ -3461,8 +3474,8 @@
     }
 
     function openCurrentStoryMediaTab() {
-        const video = document.querySelector('section:visible video, div[id^="mount"] section video');
-        const img = document.querySelector('section:visible img._aa63, section:visible img[crossorigin], div[id^="mount"] section img[referrerpolicy]');
+        const video = visibleStoryElement('section video');
+        const img = visibleStoryElement('section img._aa63, section img[crossorigin], section img[referrerpolicy]');
         const mediaUrl = video?.currentSrc || video?.src || img?.currentSrc || img?.src;
         if (mediaUrl) window.open(mediaUrl, '_blank', 'noopener,noreferrer');
         else alert('Story URL not found');
@@ -3518,9 +3531,8 @@
             timer = setTimeout(() => {
                 timer = null;
                 const path = location.pathname;
-                if (path.startsWith('/stories/')) {
-                    injectStoryDownloadTools();
-                } else {
+                injectStoryDownloadTools();
+                if (!path.startsWith('/stories/')) {
                     injectInFeedDownloadButtons();
                     injectProfileAvatarBadge();
                 }
