@@ -1,14 +1,14 @@
 <div align="center">
 
-# ⚡ IG MaxPland <sub>v2.6.0</sub>
+# ⚡ IG MaxPland <sub>v2.7.0</sub>
 
 **Relationship Intelligence Suite & Precision Media Downloader for Instagram Web**
 
 *Raw speed · Zero-footprint privacy · Stealth anti-detection*
 *Pure Vanilla JavaScript · Zero Dependencies · One File*
 
-[![Install](https://img.shields.io/badge/Install-Userscript%20v2.6.0-0284c7?style=for-the-badge&logo=tampermonkey&logoColor=white)](#-one-click-installation)
-[![Release](https://img.shields.io/badge/Release-v2.6.0-10b981?style=for-the-badge)](../../releases)
+[![Install](https://img.shields.io/badge/Install-Userscript%20v2.7.0-0284c7?style=for-the-badge&logo=tampermonkey&logoColor=white)](#-one-click-installation)
+[![Release](https://img.shields.io/badge/Release-v2.7.0-10b981?style=for-the-badge)](../../releases)
 [![License](https://img.shields.io/badge/License-MIT-f59e0b?style=for-the-badge)](LICENSE)
 
 ![Dependencies](https://img.shields.io/badge/Dependencies-Zero-success?style=flat-square)
@@ -45,6 +45,31 @@ IG MaxPland is built on five strict engineering principles:
 | 📊 **Account Health Audit** | Real-time mutual ratios, ghost impact, and growth sparklines |
 | 📥 **Precision Downloader** | HD photos, 1080p MP4 videos, full carousels, stories & avatars — streamed direct to disk |
 | 🛡️ **Anti-Detection Hardening** | Native header parity, randomized jitter delays, zero bot signatures |
+
+## What's new in v2.7.0
+
+- **Scan speed in Settings:** saved A/B/C selection, with A as the default.
+- **Follow-state filters:** “Followed” / “Not followed yet” (ติดตามแล้ว / ยังไม่ติดตาม) work alongside the existing relationship categories and hide filters. Select one at a time; click it again to clear.
+- **Separate export row:** Copy Usernames, CSV, and JSON sit below the filters, right-aligned. Filters can wrap without crowding export actions.
+- **Cleanup:** removed unused classifier/cache/version fields; the settings delay label now reads the actual configuration.
+
+### Choose a scan mode
+
+Open **Settings → Scan Speed** before starting a relationship scan.
+
+| Mode | How it runs | Inter-page pause | Guidance |
+| :--- | :--- | :--- | :--- |
+| **A — Normal (default)** | Followers, then Following | 2–3 seconds | Most conservative available mode |
+| **B — Fast** | Both lists concurrently | 2–3 seconds per list | Higher combined request rate |
+| **C — Fastest** | Both lists concurrently | 0.5–1 second per list | Higher rate-limit risk; confirmation required |
+
+The **~2x / ~4x labels are targets, not measured speedups**. Both lists use the same logged-in account and may share Instagram's rate limits. No mode guarantees protection from restrictions. Stop/abort remains supported; a failed list cancels its concurrent sibling, and incomplete scans do not save a snapshot. The scan summary reports fetch, wait, and total time for comparison.
+
+### Use follow-state filters
+
+“Followed” means the account ID is present in your currently loaded **Following** list; “Not followed yet” means it is absent. These are current-list membership filters, not a historical record of every account you have ever followed. Scan again after changes made outside the script to refresh the data.
+
+For example, open **Ghost Accounts**, then select **Followed** to see which no-avatar followers you also follow. A missing avatar or follow state does **not** prove that an account is fake. Export actions apply to the displayed filtered list.
 
 ## 📊 Feature Comparison
 
@@ -231,8 +256,8 @@ graph LR
 
 | Edition | Language | Direct Installation |
 | :--- | :--- | :--- |
-| 🌐 **Global Release** | English | [**👉 Install IG MaxPland (v2.6.0 EN)**](https://raw.githubusercontent.com/Stxyu-p/ig-maxpland/main/ig_maxpland_en.user.js) |
-| 🇹🇭 **Thai Native Edition** | ภาษาไทย | [**👉 ติดตั้ง IG MaxPland (v2.6.0 TH)**](https://raw.githubusercontent.com/Stxyu-p/ig-maxpland/main/ig_maxpland.user.js) |
+| 🌐 **Global Release** | English | [**👉 Install IG MaxPland (v2.7.0 EN)**](https://raw.githubusercontent.com/Stxyu-p/ig-maxpland/main/ig_maxpland_en.user.js) |
+| 🇹🇭 **Thai Native Edition** | ภาษาไทย | [**👉 ติดตั้ง IG MaxPland (v2.7.0 TH)**](https://raw.githubusercontent.com/Stxyu-p/ig-maxpland/main/ig_maxpland.user.js) |
 
 **Step 3 — Start using:**
 Open [Instagram Web](https://www.instagram.com/) and look for the **MaxPland floating icon** at the bottom-right of your screen.
@@ -260,11 +285,15 @@ Open [Instagram Web](https://www.instagram.com/) and look for the **MaxPland flo
 ## 🧪 Development & Testing
 
 ```bash
-node --check ig_maxpland.user.js   # syntax gate
-node round1.check.cjs              # 25 behavioral checks (no live Instagram access)
+node --check ig_maxpland.user.js
+node --check ig_maxpland_en.user.js
+node --unhandled-rejections=strict round1.check.cjs
+node --unhandled-rejections=strict round1.check.cjs ig_maxpland_en.user.js
 ```
 
 The check harness loads the real userscript in an isolated Node `vm` context with stubbed DOM, storage, and network boundaries — it exercises the original functions without ever sending a request to Instagram.
+
+Current checks: **37/37 pass for each edition**. The separated filter/export layout was also checked in a browser preview at **375, 600, and 900px** without horizontal overflow. The preview isolates the toolbar markup/CSS; it is not an Instagram integration test. Live Instagram behavior and the speed targets still require real-session validation.
 
 ## ❓ FAQ
 

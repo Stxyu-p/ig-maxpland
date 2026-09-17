@@ -450,6 +450,15 @@ test('Legacy fields stay removed and settings delay reads config', () => {
     assert.ok(source.includes('${APP_CONFIG.UNFOLLOW_DELAY_MIN.toLocaleString()} - ${APP_CONFIG.UNFOLLOW_DELAY_MAX.toLocaleString()} ms'));
 });
 
+test('Export actions have a separate row after filters', () => {
+    const filters = source.slice(source.indexOf('<div class="maxpland-subfilters">'), source.indexOf('<!-- Action Bar -->'));
+    assert.match(filters, /<\/div>\s*<\/div>\s*<div class="maxpland-export-actions"/);
+    assert.match(source, /\.maxpland-export-actions\s*\{[^}]*display: flex;[^}]*justify-content: flex-end;[^}]*flex-wrap: wrap;/);
+    const [chips, actions] = filters.split('<div class="maxpland-export-actions"');
+    assert.equal((chips.match(/id="toggle-filter-/g) || []).length, 6);
+    assert.equal((actions.match(/id="maxpland-btn-(?:copy-usernames|export-csv|export-json)"/g) || []).length, 3);
+});
+
 (async () => {
     let failed = 0;
     for (const [name, fn] of tests) {

@@ -243,6 +243,9 @@
         .maxpland-subfilters {
             display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; font-size: 11.5px; color: var(--mp-text-secondary);
         }
+        .maxpland-export-actions {
+            display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 6px; margin-bottom: 12px;
+        }
         .maxpland-chip-toggle {
             display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 5px;
             background: var(--mp-bg-panel); border: 1px solid var(--mp-border-card); cursor: pointer; user-select: none;
@@ -1574,17 +1577,17 @@
                         <div class="maxpland-chip-toggle" id="toggle-filter-notfollowing" title="แสดงเฉพาะบัญชีที่เรายังไม่ได้กดติดตาม">
                             ยังไม่ติดตาม
                         </div>
-                        <div style="margin-left:auto;display:flex;gap:6px;">
-                            <button class="maxpland-btn-secondary" id="maxpland-btn-copy-usernames" style="padding:4px 9px;font-size:11.5px;" title="คัดลอกรายชื่อ Username ทั้งหมดที่แสดงอยู่">
-                                ${ICONS.COPY} คัดลอกชื่อ
-                            </button>
-                            <button class="maxpland-btn-secondary" id="maxpland-btn-export-csv" style="padding:4px 9px;font-size:11.5px;">
-                                ${ICONS.DOWNLOAD} CSV
-                            </button>
-                            <button class="maxpland-btn-secondary" id="maxpland-btn-export-json" style="padding:4px 9px;font-size:11.5px;">
-                                JSON
-                            </button>
-                        </div>
+                    </div>
+                    <div class="maxpland-export-actions">
+                        <button class="maxpland-btn-secondary" id="maxpland-btn-copy-usernames" style="padding:4px 9px;font-size:11.5px;" title="คัดลอกรายชื่อ Username ทั้งหมดที่แสดงอยู่">
+                            ${ICONS.COPY} คัดลอกชื่อ
+                        </button>
+                        <button class="maxpland-btn-secondary" id="maxpland-btn-export-csv" style="padding:4px 9px;font-size:11.5px;">
+                            ${ICONS.DOWNLOAD} CSV
+                        </button>
+                        <button class="maxpland-btn-secondary" id="maxpland-btn-export-json" style="padding:4px 9px;font-size:11.5px;">
+                            JSON
+                        </button>
                     </div>
 
                     <!-- Action Bar -->
