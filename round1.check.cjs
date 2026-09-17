@@ -17,7 +17,7 @@ function harness() {
         querySelector() { return null; }, querySelectorAll() { return []; } };
     const context = vm.createContext({ document, console, URL, URLSearchParams, AbortController, DOMException,
         setTimeout() { return 1; }, clearTimeout() {}, setInterval() { return 1; }, clearInterval() {},
-        localStorage: { getItem() { return null; }, setItem() {} },
+        localStorage: { getItem() { return null; }, setItem() {} }, performance,
         window: {}, location: { pathname: '/', href: 'https://www.instagram.com/' },
         alert() {}, confirm() { return true; } });
     const marker = "    if (document.readyState === 'complete' || document.readyState === 'interactive') {";
@@ -294,6 +294,36 @@ test('Batch confirm quotes the configured delay, not stale prose', async () => {
 });
 test('Select checkbox exposes an accessible name', () => {
     assert.match(source, /user-select-checkbox[^>]*aria-label=/, 'row checkbox needs an accessible name');
+});
+
+function perfHarness(pageCount, { usersPerPage = 12 } = {}) {
+    const h = harness();
+    h.MaxPlandVault.getLatestSnapshot = async () => null;
+    h.MaxPlandVault.getWhitelist = async () => new Map();
+    h.MaxPlandVault.saveSnapshot = async () => {};
+    h.IgBridge.resolveCurrentUser = async () => ({ id: '1', username: 'me' });
+    h.IgBridge.fetchAllRelationships = async (endpoint, _uid, _limit, onProgress) => {
+        const list = [];
+        list.completed = true;
+        list.pagesFetched = 0;
+        for (let p = 1; p <= pageCount; p++) {
+            for (let i = 0; i < usersPerPage; i++) list.push({ id: String(endpoint.length * 100000 + p * 1000 + i), username: 'u' });
+            list.pagesFetched = p;
+            onProgress?.(list.length, p, null);
+        }
+        return list;
+    };
+    return h;
+}
+test('Relationship scan surfaces time accounting for the next real scan', async () => {
+    const h = perfHarness(4);
+    await h.runRelationshipScan();
+    const st = h.STATE.scanStatus;
+    assert.ok(st && Number.isFinite(st.requestMs) && Number.isFinite(st.waitMs) && Number.isFinite(st.wallMs), 'scanStatus must carry requestMs/waitMs/wallMs');
+    assert.ok(st.wallMs >= 0 && st.requestMs >= 0 && st.waitMs >= 0);
+    const summary = String(h.document.getElementById('maxpland-scan-status-summary').textContent);
+    assert.match(summary, /ดึงข้อมูล|Fetch/, 'summary shows network time');
+    assert.match(summary, /รวม|Total/, 'summary shows wall time');
 });
 
 (async () => {

@@ -1099,12 +1099,15 @@
             let cursor = null, transport = 'rest';
             const signal = STATE.scanController?.signal;
             const limit = Math.max(1, Math.min(250, Number(pageSafetyLimit) || 250));
+            const fetchStats = { requestMs: 0, waitMs: 0 };
             try {
                 while (!STATE.stopScanFlag) {
                     this.assertAccount(String(userId));
                     let data;
                     try {
+                        const t0 = performance.now();
                         data = await this.fetchRelationshipPage(endpoint, userId, cursor, { transport, signal });
+                        fetchStats.requestMs += performance.now() - t0;
                     } catch (err) {
                         // Only first-page endpoint incompatibility can switch routes. Never mix cursors,
                         // bypass session challenges, or repeat a rejected request unchanged.
@@ -1112,7 +1115,9 @@
                         transport = 'graphql';
                         onProgress?.(0, 0, 'Instagram ไม่รับคำขอแบบเดิม กำลังลองเส้นทางอ่านสำรอง...');
                         if (STATE.stopScanFlag) break;
+                        const t1 = performance.now();
                         data = await this.fetchRelationshipPage(endpoint, userId, null, { transport, signal });
+                        fetchStats.requestMs += performance.now() - t1;
                     }
                     this.assertAccount(String(userId));
                     if (STATE.stopScanFlag) break;
@@ -1150,12 +1155,15 @@
                     cursor = next;
                     // Yield between pages and honor Stop without triggering automated activity detection
                     const pause = all.pagesFetched % 4 === 0 ? (4500 + Math.floor(Math.random() * 2000)) : (2200 + Math.floor(Math.random() * 1200));
+                    const tw = performance.now();
                     for (let ms = 0; ms < pause && !STATE.stopScanFlag; ms += 250) await sleep(250);
+                    fetchStats.waitMs += performance.now() - tw;
                 }
             } catch (err) {
                 all.lastError = err;
                 onProgress?.(all.length, all.pagesFetched, err.message);
             }
+            all.fetchStats = fetchStats;
             return all;
         }
 
@@ -2436,7 +2444,11 @@
             el('maxpland-progress-fill').style.width = '100%';
             phase.textContent = 'สแกนเสร็จสมบูรณ์';
             notice.style.display = 'none';
-            summary.textContent = `Followers ${followers.length.toLocaleString()} · Following ${following.length.toLocaleString()}`;
+            const fs = lists.followers.fetchStats || { requestMs: 0, waitMs: 0 };
+            const fw = lists.following.fetchStats || { requestMs: 0, waitMs: 0 };
+            STATE.scanStatus = { requestMs: fs.requestMs + fw.requestMs, waitMs: fs.waitMs + fw.waitMs, wallMs: Date.now() - STATE.scanStartTime };
+            const fmtMs = ms => { const s = Math.round(ms / 1000); return s >= 60 ? `${Math.floor(s / 60)} นาที ${s % 60} วิ` : `${s} วิ`; };
+            summary.textContent = `Followers ${followers.length.toLocaleString()} · Following ${following.length.toLocaleString()} · ดึงข้อมูล ${fmtMs(STATE.scanStatus.requestMs)} · รอเว้นจังหวะ ${fmtMs(STATE.scanStatus.waitMs)} · รวม ${fmtMs(STATE.scanStatus.wallMs)}`;
             showToast('สแกนเสร็จสมบูรณ์แล้วค่ะ');
         } catch (err) {
             phase.textContent = STATE.stopScanFlag || err.name === 'AbortError' ? 'หยุดการสแกนแล้ว' : 'สแกนไม่สำเร็จ';
