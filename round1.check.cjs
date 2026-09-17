@@ -26,7 +26,7 @@ function harness() {
     vm.runInContext(source.slice(0, source.indexOf(marker)) + `
         globalThis.api = { STATE, IgBridge, MaxPlandVault, runInactiveScan, runRelationshipScan,
             runBatchUnfollow, downloadResolvedMedia, renderRelationshipList, applyUnfollowResult,
-            injectStoryDownloadTools, downloadCurrentStoryMedia, openCurrentStoryMediaTab,
+            setFollowStateChip, injectStoryDownloadTools, downloadCurrentStoryMedia, openCurrentStoryMediaTab,
             bindUIEvents, setSleep(fn) { sleep = fn; }, setDownload(fn) { gmDownload = fn; } };
     })();`, context);
     const api = context.api;
@@ -295,6 +295,25 @@ test('Batch confirm quotes the configured delay, not stale prose', async () => {
 test('Select checkbox exposes an accessible name', () => {
     assert.match(source, /user-select-checkbox[^>]*aria-label=/, 'row checkbox needs an accessible name');
 });
+test('Inter-page scan pacing stays uniformly short', async () => {
+    const h = harness();
+    const PAGES = 8, PER = 3;
+    let page = 0, cur = 0;
+    const pauses = [];
+    h.IgBridge.fetchRelationshipPage = async (_endpoint, _uid, _cursor) => {
+        pauses.push(cur); cur = 0;
+        page++;
+        const users = Array.from({ length: PER }, (_, i) => ({ id: String(page * 100 + i), username: 'u' }));
+        return { users, has_more: page < PAGES, next_max_id: page < PAGES ? 'c' + page : null };
+    };
+    h.setSleep(async ms => { cur += ms; });
+    const all = await h.IgBridge.fetchAllRelationships('followers', '1', 250, () => {});
+    assert.equal(all.completed, true);
+    assert.equal(all.length, PAGES * PER, 'all pages fetched and deduped');
+    pauses.shift(); // no pause precedes page 1
+    assert.equal(pauses.length, PAGES - 1, 'one pause per inter-page gap');
+    for (const p of pauses) assert.ok(p <= 3000, `pause ${Math.round(p)}ms exceeds the uniform 2-3s budget`);
+});
 
 function perfHarness(pageCount, { usersPerPage = 12 } = {}) {
     const h = harness();
@@ -324,6 +343,111 @@ test('Relationship scan surfaces time accounting for the next real scan', async 
     const summary = String(h.document.getElementById('maxpland-scan-status-summary').textContent);
     assert.match(summary, /ดึงข้อมูล|Fetch/, 'summary shows network time');
     assert.match(summary, /รวม|Total/, 'summary shows wall time');
+});
+
+test('Scan speed lives in settings prefs, defaults to A, gone from action bar', () => {
+    assert.match(source, /id="pref-setting-scan-speed"[^>]*aria-label=/);
+    assert.match(source, /option value="A" selected/);
+    assert.equal(source.includes('maxpland-scan-speed'), false, 'old action-bar select must be removed');
+    assert.match(source, /scanSpeed/, 'prefs must persist scanSpeed');
+});
+test('A is sequential; B and C overlap only the two endpoints', async () => {
+    for (const mode of ['A', 'B', 'C', 'invalid']) {
+        const h = perfHarness(1); let active = 0, peak = 0, calls = 0;
+        h.STATE.prefs.scanSpeed = mode;
+        h.IgBridge.fetchAllRelationships = async (_endpoint, _uid, _limit, progress, speed) => {
+            calls++; active++; peak = Math.max(peak, active);
+            assert.equal(speed, mode === 'invalid' ? 'A' : mode);
+            await new Promise(resolve => setImmediate(resolve));
+            progress(3, 1); active--;
+            return Object.assign([], { completed: true });
+        };
+        await h.runRelationshipScan();
+        assert.equal(calls, 2); assert.equal(peak, ['B', 'C'].includes(mode) ? 2 : 1);
+        assert.equal(h.STATE.scanIncomplete, false);
+    }
+});
+test('C confirmation can cancel without starting any request', async () => {
+    const h = perfHarness(1); let calls = 0;
+    h.STATE.prefs.scanSpeed = 'C';
+    h.context.confirm = () => false;
+    h.IgBridge.resolveCurrentUser = async () => { calls++; };
+    await h.runRelationshipScan();
+    assert.equal(calls, 0); assert.equal(h.STATE.isScanning, false);
+});
+test('Concurrent failure cancels sibling, drains workers and never saves partial snapshot', async () => {
+    for (const code of ['RATE_LIMIT', 'CHECKPOINT', 'AUTH', 'ACCOUNT_CHANGED', 'PAYLOAD']) {
+        const h = perfHarness(1); let saved = 0, drained = false;
+        h.STATE.prefs.scanSpeed = 'B';
+        h.MaxPlandVault.saveSnapshot = async () => { saved++; };
+        h.IgBridge.fetchAllRelationships = async endpoint => {
+            if (endpoint === 'followers') {
+                await new Promise(resolve => setImmediate(resolve));
+                return Object.assign([], { completed: false, lastError: Object.assign(new Error(code), { code }) });
+            }
+            const signal = h.STATE.scanController.signal;
+            await new Promise(resolve => signal.addEventListener('abort', resolve, { once: true }));
+            await new Promise(resolve => setImmediate(resolve)); drained = true;
+            return Object.assign([], { completed: false, lastError: new DOMException('Stopped', 'AbortError') });
+        };
+        await h.runRelationshipScan();
+        assert.equal(saved, 0); assert.equal(drained, true); assert.equal(h.STATE.scanIncomplete, true);
+        assert.equal(h.STATE.scanController, null);
+        assert.match(h.document.getElementById('maxpland-scan-notice').textContent, new RegExp(code));
+    }
+});
+test('C reduces only inter-page pause; A/B retain 2-3 seconds', async () => {
+    for (const mode of ['A', 'B', 'C']) {
+        const h = harness(); let requests = 0, waited = 0;
+        h.IgBridge.fetchRelationshipPage = async () => ({ users: [{ id: String(++requests) }], next_max_id: requests === 1 ? 'next' : null });
+        h.setSleep(async ms => { waited += ms; });
+        const result = await h.IgBridge.fetchAllRelationships('followers', '1', 250, null, mode);
+        assert.equal(result.completed, true);
+        assert.ok(mode === 'C' ? waited >= 500 && waited <= 1000 : waited >= 2000 && waited <= 3000, `${mode}: ${waited}`);
+    }
+});
+test('Aborting during pause prevents the next page', async () => {
+    const h = harness(); let calls = 0;
+    h.STATE.scanController = new AbortController();
+    h.IgBridge.fetchRelationshipPage = async () => { calls++; return { users: [{ id: '2' }], next_max_id: 'next' }; };
+    h.setSleep(async () => h.STATE.scanController.abort());
+    const result = await h.IgBridge.fetchAllRelationships('followers', '1', 250, null, 'C');
+    assert.equal(calls, 1); assert.equal(result.completed, false);
+});
+
+test('Follow-state chips filter by presence in our Following list, exclusively', () => {
+    assert.match(source, /toggle-filter-following'\)\.addEventListener\('click', \(\) => setFollowStateChip\('onlyFollowing'\)/);
+    assert.match(source, /toggle-filter-notfollowing'\)\.addEventListener\('click', \(\) => setFollowStateChip\('onlyNotFollowed'\)/);
+    for (const flag of ['onlyFollowing', 'onlyNotFollowed']) {
+        const h = harness();
+        h.STATE.relationshipFilter = 'ghost';
+        h.STATE.ghostFollowers = [
+            { id: '2', username: 'followed_person' },
+            { id: '3', username: 'stranger_person' }
+        ];
+        h.STATE.following = [{ id: '2', username: 'followed_person' }];
+        h.STATE.subFilters[flag] = true;
+        h.renderRelationshipList();
+        const rows = String(h.document.getElementById('maxpland-relationship-list').innerHTML);
+        assert.equal(rows.includes('followed_person'), flag === 'onlyFollowing', flag);
+        assert.equal(rows.includes('stranger_person'), flag === 'onlyNotFollowed', flag);
+    }
+});
+test('Follow-state chips are mutually exclusive and re-click clears', () => {
+    const h = harness();
+    h.setFollowStateChip('onlyFollowing');
+    assert.equal(h.STATE.subFilters.onlyFollowing, true);
+    h.setFollowStateChip('onlyNotFollowed');
+    assert.equal(h.STATE.subFilters.onlyFollowing, false, 'activating one clears the other');
+    assert.equal(h.STATE.subFilters.onlyNotFollowed, true);
+    h.setFollowStateChip('onlyNotFollowed');
+    assert.equal(h.STATE.subFilters.onlyNotFollowed, false, 're-click clears');
+});
+
+test('Legacy fields stay removed and settings delay reads config', () => {
+    assert.doesNotMatch(source, /isSuspiciousBot|cachedAppId|\bVERSION:\s*'2\.7\.0'/);
+    assert.equal(source.includes('3,000 - 5,000 ms'), false);
+    assert.ok(source.includes('${APP_CONFIG.UNFOLLOW_DELAY_MIN.toLocaleString()} - ${APP_CONFIG.UNFOLLOW_DELAY_MAX.toLocaleString()} ms'));
 });
 
 (async () => {

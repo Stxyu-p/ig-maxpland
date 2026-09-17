@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         IG MaxPland
 // @namespace    http://tampermonkey.net/
-// @version      2.6.0
+// @version      2.7.0
 // @description  Instagram Relationship Scanner & Clean Media Downloader. Track unfollowers, mutuals, fans, stealth story viewer, clean feed, and full-resolution media downloader.
 // @author       P Choke & SORA
 // @match        https://*.instagram.com/*
@@ -29,7 +29,6 @@
 
     const APP_CONFIG = {
         APP_NAME: 'IG MaxPland',
-        VERSION: '2.6.0',
         DB_NAME: 'IG_MAXPLAND_VAULT',
         DB_VERSION: 6,
         PAGE_SIZE: 50,
@@ -809,7 +808,6 @@
        ========================================================================== */
 
     class IgBridge {
-        static cachedAppId = null;
         static currentUserId = null;
         static currentUsername = null;
         static wwwClaim = null;
@@ -1090,7 +1088,7 @@
             return this.request(`/api/v1/friendships/${uid}/${endpoint}/?${qs}`, { ...options, accountId: uid });
         }
 
-        static async fetchAllRelationships(endpoint, userId, pageSafetyLimit = 250, onProgress) {
+        static async fetchAllRelationships(endpoint, userId, pageSafetyLimit = 250, onProgress, speedMode = 'A') {
             const all = [];
             all.completed = false;
             all.lastError = null;
@@ -1154,10 +1152,13 @@
                     seenCursors.add(next);
                     cursor = next;
                     // Yield between pages and honor Stop without triggering automated activity detection
-                    const pause = all.pagesFetched % 4 === 0 ? (4500 + Math.floor(Math.random() * 2000)) : (2200 + Math.floor(Math.random() * 1200));
+                    // ponytail: speedMode only shortens the inter-page pause (2-3s → 0.5-1s);
+                    // PAGE_SIZE/headers/transports untouched. Upgrade path: per-mode presets object.
+                    const pause = speedMode === 'C' ? 500 + Math.floor(Math.random() * 500) : 2000 + Math.floor(Math.random() * 1000);
                     const tw = performance.now();
-                    for (let ms = 0; ms < pause && !STATE.stopScanFlag; ms += 250) await sleep(250);
+                    for (let ms = 0; ms < pause && !STATE.stopScanFlag && !signal?.aborted; ms += 250) await sleep(250);
                     fetchStats.waitMs += performance.now() - tw;
+                    if (STATE.stopScanFlag || signal?.aborted) break;
                 }
             } catch (err) {
                 all.lastError = err;
@@ -1249,7 +1250,8 @@
         cleanFeed: true,
         quickDownloadFeed: true,
         quickDownloadStory: true,
-        inactiveThresholdDays: 180
+        inactiveThresholdDays: 180,
+        scanSpeed: 'A'
     };
 
     function loadPrefs() {
@@ -1292,7 +1294,9 @@
             excludeVerified: false,
             excludePrivate: false,
             excludeNoAvatar: false,
-            excludeWhitelist: false
+            excludeWhitelist: false,
+            onlyFollowing: false,
+            onlyNotFollowed: false
         },
         scanStartTime: 0,
         prefs: loadPrefs()
@@ -1564,6 +1568,12 @@
                         <div class="maxpland-chip-toggle" id="toggle-filter-noavatar" title="Hide accounts without avatar">
                             Hide No-Avatar
                         </div>
+                        <div class="maxpland-chip-toggle" id="toggle-filter-following" title="Show only accounts we already follow (present in our Following list)">
+                            Followed
+                        </div>
+                        <div class="maxpland-chip-toggle" id="toggle-filter-notfollowing" title="Show only accounts we have not followed yet">
+                            Not followed yet
+                        </div>
                         <div style="margin-left:auto;display:flex;gap:6px;">
                             <button class="maxpland-btn-secondary" id="maxpland-btn-copy-usernames" style="padding:4px 9px;font-size:11.5px;" title="Copy all visible usernames to clipboard">
                                 ${ICONS.COPY} Copy Usernames
@@ -1772,7 +1782,18 @@
                                 <div style="font-weight:600;font-size:13px;">Unfollow Jitter Delay</div>
                                 <div style="font-size:11.5px;color:var(--mp-text-muted);">Randomized pacing interval between unfollow actions to emulate natural human behavior and prevent rate limits.</div>
                             </div>
-                            <span style="font-size:12px;font-weight:600;color:var(--mp-emerald);">3,000 - 5,000 ms (Randomized)</span>
+                            <span style="font-size:12px;font-weight:600;color:var(--mp-emerald);">${APP_CONFIG.UNFOLLOW_DELAY_MIN.toLocaleString()} - ${APP_CONFIG.UNFOLLOW_DELAY_MAX.toLocaleString()} ms (Randomized)</span>
+                        </div>
+                        <div class="maxpland-settings-row">
+                            <div>
+                                <div style="font-weight:600;font-size:13px;">Scan Speed</div>
+                                <div style="font-size:11.5px;color:var(--mp-text-muted);">A sequential · B fetches both lists concurrently (~2x) · C fastest but shortens inter-page pacing, higher rate-limit risk</div>
+                            </div>
+                            <select id="pref-setting-scan-speed" class="maxpland-select" aria-label="Scan speed" title="A: Normal (sequential) · B: ~2x faster (fetches both lists concurrently) · C: Fastest (shorter inter-page pacing, higher rate-limit risk)">
+                                <option value="A" selected>A — Normal</option>
+                                <option value="B">B — Fast ~2x</option>
+                                <option value="C">C — Fastest ~4x (high risk)</option>
+                            </select>
                         </div>
                         <div class="maxpland-settings-row">
                             <div>
@@ -1832,7 +1853,7 @@
             </div>
 
             <div class="maxpland-footer">
-                <span>MaxPland v2.6.0 · Clean Minimal Precision (Anti-Slop)</span>
+                <span>MaxPland v2.7.0 · Clean Minimal Precision (Anti-Slop)</span>
                 <span>Toggle <kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>M</kbd></span>
             </div>
         `;
@@ -2030,6 +2051,10 @@
             renderRelationshipList();
         });
 
+        document.getElementById('toggle-filter-following').addEventListener('click', () => setFollowStateChip('onlyFollowing'));
+
+        document.getElementById('toggle-filter-notfollowing').addEventListener('click', () => setFollowStateChip('onlyNotFollowed'));
+
         // Search Input
         document.getElementById('maxpland-user-search').addEventListener('input', (e) => {
             STATE.searchQuery = e.target.value.trim().toLowerCase();
@@ -2118,6 +2143,14 @@
                 STATE.prefs.inactiveThresholdDays = Number(e.target.value);
                 savePrefs(STATE.prefs);
                 showToast(`Inactive threshold updated to ${e.target.value} days`);
+            });
+        }
+        const selSpeed = document.getElementById('pref-setting-scan-speed');
+        if (selSpeed) {
+            selSpeed.addEventListener('change', (e) => {
+                STATE.prefs.scanSpeed = e.target.value;
+                savePrefs(STATE.prefs);
+                showToast(`Scan speed set to mode ${e.target.value}`);
             });
         }
         const btnSettingBackup = document.getElementById('setting-btn-backup-whitelist');
@@ -2253,14 +2286,6 @@
         return APP_CONFIG.DEFAULT_AVATAR_PATTERNS.some(p => user.profile_pic_url.includes(p));
     }
 
-    function isSuspiciousBot(user) {
-        if (!user) return false;
-        const uname = String(user.username || '');
-        if ((!user.full_name || user.full_name.trim() === '') && hasNoAvatar(user)) return true;
-        if (/\d{5,}$/.test(uname) && hasNoAvatar(user)) return true;
-        return false;
-    }
-
     function extractShortcodesFromText(text) {
         const raw = String(text || '');
         const codes = new Set();
@@ -2334,6 +2359,8 @@
 
     async function runRelationshipScan() {
         if (STATE.isScanning || STATE.isUnfollowing || STATE.isScanningInactive) return;
+        if (STATE.prefs?.scanSpeed === 'C'
+            && !confirm('⚠️ Mode C shortens inter-page pacing to 0.5-1 s\nHigher risk of temporary Instagram rate limiting (429)\nProceed with the high-speed scan?')) return;
         STATE.isScanning = true;
         STATE.stopScanFlag = false;
         STATE.scanController = new AbortController();
@@ -2370,20 +2397,47 @@
             STATE.relationshipAccountId = currentUser.id;
             el('maxpland-account-badge').textContent = currentUser.username ? `@${currentUser.username}` : `UID: ${currentUser.id}`;
             const lists = {};
-            for (const [index, endpoint] of ['followers', 'following'].entries()) {
+            const speedMode = ['B', 'C'].includes(STATE.prefs?.scanSpeed) ? STATE.prefs.scanSpeed : 'A';
+            const startList = endpoint => {
                 if (STATE.stopScanFlag) throw new DOMException('Scan aborted by user', 'AbortError');
-                phase.textContent = `[${index + 1}/2] Fetching ${endpoint === 'followers' ? 'Followers' : 'Following'}...`;
-                const result = await IgBridge.fetchAllRelationships(endpoint, currentUser.id,
+                phase.textContent = endpoint === 'followers' ? 'Fetching Followers...' : 'Fetching Following...';
+                return IgBridge.fetchAllRelationships(endpoint, currentUser.id,
                     endpoint === 'followers' ? APP_CONFIG.FOLLOWERS_PAGE_SAFETY_LIMIT : APP_CONFIG.FOLLOWING_PAGE_SAFETY_LIMIT,
                     (count, page, message) => {
                         el('maxpland-scan-stat-count').textContent = `${endpoint}: ${count.toLocaleString()}`;
                         el('maxpland-scan-stat-page').textContent = `Pages: ${page}`;
-                        el('maxpland-progress-fill').style.width = `${index * 50 + Math.min(45, page * 3)}%`;
+                        el('maxpland-progress-fill').style.width = `${Math.min(95, Math.min(45, page * 3) + (lists.followers ? 45 : 0) + (lists.following ? 45 : 0))}%`;
                         if (message) { notice.textContent = message; notice.style.display = 'block'; }
-                    });
+                    }, speedMode);
+            };
+            const finishList = (endpoint, result) => {
                 if (STATE.stopScanFlag) throw new DOMException('Scan aborted by user', 'AbortError');
                 if (!result.completed) throw result.lastError || new Error(`Incomplete fetch for ${endpoint}`);
                 lists[endpoint] = result;
+            };
+            if (speedMode === 'A') {
+                for (const endpoint of ['followers', 'following']) {
+                    finishList(endpoint, await startList(endpoint));
+                }
+            } else {
+                // B/C: the only two list endpoints run concurrently. fetchAllRelationships
+                // resolves (never rejects), so a failure is a non-completed result: race a
+                // first-failure watcher, abort the sibling, drain, then surface the error.
+                const stagePromises = [startList('followers'), startList('following')];
+                try {
+                    const firstFailure = Promise.race(stagePromises.map(p => p.then(r => {
+                        if (!r.completed) throw r.lastError || new Error('Incomplete fetch');
+                        return null;
+                    })));
+                    await Promise.race([Promise.all(stagePromises), firstFailure]);
+                    const results = await Promise.all(stagePromises);
+                    finishList('followers', results[0]);
+                    finishList('following', results[1]);
+                } catch (err) {
+                    STATE.scanController?.abort();
+                    await Promise.allSettled(stagePromises);
+                    throw err;
+                }
             }
             const { followers, following } = lists;
             const getUid = u => String(u?.id || u?.pk_id || u?.pk || '').trim();
@@ -2480,9 +2534,13 @@
         else if (STATE.relationshipFilter === 'inactive') pool = STATE.inactiveFollowing;
         else if (STATE.relationshipFilter === 'whitelist') pool = Array.from(STATE.whitelist.values());
 
+        const followedIds = new Set(STATE.following.map(x => String(x.id || x.pk_id || x.pk || '').trim()));
         return pool.filter(u => {
             const uid = String(u.id || u.pk_id || u.pk || '');
             const uname = String(u.username || '').toLowerCase();
+            const isFollowedByUs = uid !== '' && followedIds.has(uid);
+            if (STATE.subFilters.onlyFollowing && !isFollowedByUs) return false;
+            if (STATE.subFilters.onlyNotFollowed && isFollowedByUs) return false;
             const isWhitelisted = isProtectedUser(uid, uname);
             if (STATE.subFilters.excludeWhitelist && isWhitelisted) return false;
             if (STATE.subFilters.excludeVerified && u.is_verified) return false;
@@ -2496,6 +2554,15 @@
             }
             return true;
         });
+    }
+
+    function setFollowStateChip(which) {
+        const next = !STATE.subFilters[which];
+        STATE.subFilters.onlyFollowing = which === 'onlyFollowing' && next;
+        STATE.subFilters.onlyNotFollowed = which === 'onlyNotFollowed' && next;
+        document.getElementById('toggle-filter-following').classList.toggle('active', STATE.subFilters.onlyFollowing);
+        document.getElementById('toggle-filter-notfollowing').classList.toggle('active', STATE.subFilters.onlyNotFollowed);
+        renderRelationshipList();
     }
 
     function renderRelationshipList() {
@@ -2877,6 +2944,7 @@
         const el = id => document.getElementById(id);
         const p = STATE.prefs || {};
         if (el('pref-setting-inactive-threshold')) el('pref-setting-inactive-threshold').value = String(p.inactiveThresholdDays || 180);
+        if (el('pref-setting-scan-speed')) el('pref-setting-scan-speed').value = ['B', 'C'].includes(p.scanSpeed) ? p.scanSpeed : 'A';
     }
 
     async function runInactiveScan() {

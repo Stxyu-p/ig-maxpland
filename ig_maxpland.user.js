@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         IG MaxPland
 // @namespace    http://tampermonkey.net/
-// @version      2.6.0
-// @description  Instagram Relationship Scanner & Comprehensive Media Downloader (Anti-Slop Clean Precision v2.6.0)
+// @version      2.7.0
+// @description  Instagram Relationship Scanner & Comprehensive Media Downloader (Anti-Slop Clean Precision v2.7.0)
 // @author       P Choke & SORA
 // @match        https://*.instagram.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=instagram.com
@@ -29,7 +29,6 @@
 
     const APP_CONFIG = {
         APP_NAME: 'IG MaxPland',
-        VERSION: '2.6.0',
         DB_NAME: 'IG_MAXPLAND_VAULT',
         DB_VERSION: 6,
         PAGE_SIZE: 50,
@@ -809,7 +808,6 @@
        ========================================================================== */
 
     class IgBridge {
-        static cachedAppId = null;
         static currentUserId = null;
         static currentUsername = null;
         static wwwClaim = null;
@@ -1090,7 +1088,7 @@
             return this.request(`/api/v1/friendships/${uid}/${endpoint}/?${qs}`, { ...options, accountId: uid });
         }
 
-        static async fetchAllRelationships(endpoint, userId, pageSafetyLimit = 250, onProgress) {
+        static async fetchAllRelationships(endpoint, userId, pageSafetyLimit = 250, onProgress, speedMode = 'A') {
             const all = [];
             all.completed = false;
             all.lastError = null;
@@ -1154,10 +1152,13 @@
                     seenCursors.add(next);
                     cursor = next;
                     // Yield between pages and honor Stop without triggering automated activity detection
-                    const pause = all.pagesFetched % 4 === 0 ? (4500 + Math.floor(Math.random() * 2000)) : (2200 + Math.floor(Math.random() * 1200));
+                    // ponytail: speedMode only shortens the inter-page pause (2-3s → 0.5-1s);
+                    // PAGE_SIZE/headers/transports untouched. Upgrade path: per-mode presets object.
+                    const pause = speedMode === 'C' ? 500 + Math.floor(Math.random() * 500) : 2000 + Math.floor(Math.random() * 1000);
                     const tw = performance.now();
-                    for (let ms = 0; ms < pause && !STATE.stopScanFlag; ms += 250) await sleep(250);
+                    for (let ms = 0; ms < pause && !STATE.stopScanFlag && !signal?.aborted; ms += 250) await sleep(250);
                     fetchStats.waitMs += performance.now() - tw;
+                    if (STATE.stopScanFlag || signal?.aborted) break;
                 }
             } catch (err) {
                 all.lastError = err;
@@ -1249,7 +1250,8 @@
         cleanFeed: true,
         quickDownloadFeed: true,
         quickDownloadStory: true,
-        inactiveThresholdDays: 180
+        inactiveThresholdDays: 180,
+        scanSpeed: 'A'
     };
 
     function loadPrefs() {
@@ -1292,7 +1294,9 @@
             excludeVerified: false,
             excludePrivate: false,
             excludeNoAvatar: false,
-            excludeWhitelist: false
+            excludeWhitelist: false,
+            onlyFollowing: false,
+            onlyNotFollowed: false
         },
         scanStartTime: 0,
         prefs: loadPrefs()
@@ -1564,6 +1568,12 @@
                         <div class="maxpland-chip-toggle" id="toggle-filter-noavatar" title="ซ่อนบัญชีที่ไม่มีรูปโปรไฟล์">
                             ซ่อน No-Avatar
                         </div>
+                        <div class="maxpland-chip-toggle" id="toggle-filter-following" title="แสดงเฉพาะบัญชีที่เรากดติดตามอยู่ (มีชื่อในรายการ Following ของเรา)">
+                            ติดตามแล้ว
+                        </div>
+                        <div class="maxpland-chip-toggle" id="toggle-filter-notfollowing" title="แสดงเฉพาะบัญชีที่เรายังไม่ได้กดติดตาม">
+                            ยังไม่ติดตาม
+                        </div>
                         <div style="margin-left:auto;display:flex;gap:6px;">
                             <button class="maxpland-btn-secondary" id="maxpland-btn-copy-usernames" style="padding:4px 9px;font-size:11.5px;" title="คัดลอกรายชื่อ Username ทั้งหมดที่แสดงอยู่">
                                 ${ICONS.COPY} คัดลอกชื่อ
@@ -1772,7 +1782,18 @@
                                 <div style="font-weight:600;font-size:13px;">หน่วงเวลาการยกเลิกติดตาม (Unfollow Jitter Delay)</div>
                                 <div style="font-size:11.5px;color:var(--mp-text-muted);">สุ่มช่วงเวลาหน่วงระหว่างคำขอ เพื่อเลียนแบบพฤติกรรมมนุษย์และป้องกัน Rate Limit</div>
                             </div>
-                            <span style="font-size:12px;font-weight:600;color:var(--mp-emerald);">3,000 - 5,000 ms (สุ่มอัตโนมัติ)</span>
+                            <span style="font-size:12px;font-weight:600;color:var(--mp-emerald);">${APP_CONFIG.UNFOLLOW_DELAY_MIN.toLocaleString()} - ${APP_CONFIG.UNFOLLOW_DELAY_MAX.toLocaleString()} ms (สุ่มอัตโนมัติ)</span>
+                        </div>
+                        <div class="maxpland-settings-row">
+                            <div>
+                                <div style="font-weight:600;font-size:13px;">ความเร็วการสแกน (Scan Speed)</div>
+                                <div style="font-size:11.5px;color:var(--mp-text-muted);">A ทยอยทีละรายการ · B ดึง 2 ฝั่งพร้อมกัน (~2 เท่า) · C เร็วสุด แต่ลดเว้นจังหวะระหว่างหน้า เสี่ยงถูกจำกัด (429) มากขึ้น</div>
+                            </div>
+                            <select id="pref-setting-scan-speed" class="maxpland-select" aria-label="ความเร็วการสแกน" title="A: ปกติ (ทยอยทีละรายการ) · B: เร็วขึ้น ~2 เท่า (ดึง 2 ฝั่งพร้อมกัน) · C: เร็วสุด (ลดเว้นจังหวะระหว่างหน้า เสี่ยงถูกจำกัดมากขึ้น)">
+                                <option value="A" selected>A — ปกติ</option>
+                                <option value="B">B — เร็ว ~2x</option>
+                                <option value="C">C — เร็วสุด ~4x (เสี่ยงสูง)</option>
+                            </select>
                         </div>
                         <div class="maxpland-settings-row">
                             <div>
@@ -1832,7 +1853,7 @@
             </div>
 
             <div class="maxpland-footer">
-                <span>MaxPland v2.6.0 · Clean Minimal Precision (Anti-Slop)</span>
+                <span>MaxPland v2.7.0 · Clean Minimal Precision (Anti-Slop)</span>
                 <span>เปิด / ปิด <kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>M</kbd></span>
             </div>
         `;
@@ -2030,6 +2051,10 @@
             renderRelationshipList();
         });
 
+        document.getElementById('toggle-filter-following').addEventListener('click', () => setFollowStateChip('onlyFollowing'));
+
+        document.getElementById('toggle-filter-notfollowing').addEventListener('click', () => setFollowStateChip('onlyNotFollowed'));
+
         // Search Input
         document.getElementById('maxpland-user-search').addEventListener('input', (e) => {
             STATE.searchQuery = e.target.value.trim().toLowerCase();
@@ -2118,6 +2143,14 @@
                 STATE.prefs.inactiveThresholdDays = Number(e.target.value);
                 savePrefs(STATE.prefs);
                 showToast(`ตั้งเกณฑ์แอคดองเป็น ${e.target.value} วันแล้วค่ะ`);
+            });
+        }
+        const selSpeed = document.getElementById('pref-setting-scan-speed');
+        if (selSpeed) {
+            selSpeed.addEventListener('change', (e) => {
+                STATE.prefs.scanSpeed = e.target.value;
+                savePrefs(STATE.prefs);
+                showToast(`ตั้งความเร็วการสแกนเป็นโหมด ${e.target.value} แล้วค่ะ`);
             });
         }
         const btnSettingBackup = document.getElementById('setting-btn-backup-whitelist');
@@ -2253,14 +2286,6 @@
         return APP_CONFIG.DEFAULT_AVATAR_PATTERNS.some(p => user.profile_pic_url.includes(p));
     }
 
-    function isSuspiciousBot(user) {
-        if (!user) return false;
-        const uname = String(user.username || '');
-        if ((!user.full_name || user.full_name.trim() === '') && hasNoAvatar(user)) return true;
-        if (/\d{5,}$/.test(uname) && hasNoAvatar(user)) return true;
-        return false;
-    }
-
     function extractShortcodesFromText(text) {
         const raw = String(text || '');
         const codes = new Set();
@@ -2334,6 +2359,8 @@
 
     async function runRelationshipScan() {
         if (STATE.isScanning || STATE.isUnfollowing || STATE.isScanningInactive) return;
+        if (STATE.prefs?.scanSpeed === 'C'
+            && !confirm('⚠️ โหมด C ลดเว้นจังหวะระหว่างหน้าเหลือ 0.5–1 วินาที\nเสี่ยงถูก Instagram จำกัดชั่วคราว (429) มากขึ้น\nยืนยันจะเริ่มสแกนความเร็วสูงหรือไม่?')) return;
         STATE.isScanning = true;
         STATE.stopScanFlag = false;
         STATE.scanController = new AbortController();
@@ -2370,20 +2397,47 @@
             STATE.relationshipAccountId = currentUser.id;
             el('maxpland-account-badge').textContent = currentUser.username ? `@${currentUser.username}` : `UID: ${currentUser.id}`;
             const lists = {};
-            for (const [index, endpoint] of ['followers', 'following'].entries()) {
+            const speedMode = ['B', 'C'].includes(STATE.prefs?.scanSpeed) ? STATE.prefs.scanSpeed : 'A';
+            const startList = endpoint => {
                 if (STATE.stopScanFlag) throw new DOMException('หยุดการสแกนแล้ว', 'AbortError');
-                phase.textContent = `[${index + 1}/2] กำลังดึง ${endpoint === 'followers' ? 'Followers' : 'Following'}...`;
-                const result = await IgBridge.fetchAllRelationships(endpoint, currentUser.id,
+                phase.textContent = endpoint === 'followers' ? 'กำลังดึง Followers...' : 'กำลังดึง Following...';
+                return IgBridge.fetchAllRelationships(endpoint, currentUser.id,
                     endpoint === 'followers' ? APP_CONFIG.FOLLOWERS_PAGE_SAFETY_LIMIT : APP_CONFIG.FOLLOWING_PAGE_SAFETY_LIMIT,
                     (count, page, message) => {
                         el('maxpland-scan-stat-count').textContent = `${endpoint}: ${count.toLocaleString()}`;
                         el('maxpland-scan-stat-page').textContent = `หน้า: ${page}`;
-                        el('maxpland-progress-fill').style.width = `${index * 50 + Math.min(45, page * 3)}%`;
+                        el('maxpland-progress-fill').style.width = `${Math.min(95, Math.min(45, page * 3) + (lists.followers ? 45 : 0) + (lists.following ? 45 : 0))}%`;
                         if (message) { notice.textContent = message; notice.style.display = 'block'; }
-                    });
+                    }, speedMode);
+            };
+            const finishList = (endpoint, result) => {
                 if (STATE.stopScanFlag) throw new DOMException('หยุดการสแกนแล้ว', 'AbortError');
                 if (!result.completed) throw result.lastError || new Error(`ดึง ${endpoint} ไม่ครบ`);
                 lists[endpoint] = result;
+            };
+            if (speedMode === 'A') {
+                for (const endpoint of ['followers', 'following']) {
+                    finishList(endpoint, await startList(endpoint));
+                }
+            } else {
+                // B/C: the only two list endpoints run concurrently. fetchAllRelationships
+                // resolves (never rejects), so a failure is a non-completed result: race a
+                // first-failure watcher, abort the sibling, drain, then surface the error.
+                const stagePromises = [startList('followers'), startList('following')];
+                try {
+                    const firstFailure = Promise.race(stagePromises.map(p => p.then(r => {
+                        if (!r.completed) throw r.lastError || new Error('ดึงข้อมูลไม่ครบ');
+                        return null;
+                    })));
+                    await Promise.race([Promise.all(stagePromises), firstFailure]);
+                    const results = await Promise.all(stagePromises);
+                    finishList('followers', results[0]);
+                    finishList('following', results[1]);
+                } catch (err) {
+                    STATE.scanController?.abort();
+                    await Promise.allSettled(stagePromises);
+                    throw err;
+                }
             }
             const { followers, following } = lists;
             const getUid = u => String(u?.id || u?.pk_id || u?.pk || '').trim();
@@ -2480,9 +2534,13 @@
         else if (STATE.relationshipFilter === 'inactive') pool = STATE.inactiveFollowing;
         else if (STATE.relationshipFilter === 'whitelist') pool = Array.from(STATE.whitelist.values());
 
+        const followedIds = new Set(STATE.following.map(x => String(x.id || x.pk_id || x.pk || '').trim()));
         return pool.filter(u => {
             const uid = String(u.id || u.pk_id || u.pk || '');
             const uname = String(u.username || '').toLowerCase();
+            const isFollowedByUs = uid !== '' && followedIds.has(uid);
+            if (STATE.subFilters.onlyFollowing && !isFollowedByUs) return false;
+            if (STATE.subFilters.onlyNotFollowed && isFollowedByUs) return false;
             const isWhitelisted = isProtectedUser(uid, uname);
             if (STATE.subFilters.excludeWhitelist && isWhitelisted) return false;
             if (STATE.subFilters.excludeVerified && u.is_verified) return false;
@@ -2496,6 +2554,15 @@
             }
             return true;
         });
+    }
+
+    function setFollowStateChip(which) {
+        const next = !STATE.subFilters[which];
+        STATE.subFilters.onlyFollowing = which === 'onlyFollowing' && next;
+        STATE.subFilters.onlyNotFollowed = which === 'onlyNotFollowed' && next;
+        document.getElementById('toggle-filter-following').classList.toggle('active', STATE.subFilters.onlyFollowing);
+        document.getElementById('toggle-filter-notfollowing').classList.toggle('active', STATE.subFilters.onlyNotFollowed);
+        renderRelationshipList();
     }
 
     function renderRelationshipList() {
@@ -2877,6 +2944,7 @@
         const el = id => document.getElementById(id);
         const p = STATE.prefs || {};
         if (el('pref-setting-inactive-threshold')) el('pref-setting-inactive-threshold').value = String(p.inactiveThresholdDays || 180);
+        if (el('pref-setting-scan-speed')) el('pref-setting-scan-speed').value = ['B', 'C'].includes(p.scanSpeed) ? p.scanSpeed : 'A';
     }
 
     async function runInactiveScan() {
