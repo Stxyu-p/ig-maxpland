@@ -8,17 +8,57 @@ const tests = [];
 function test(name, fn) { tests.push([name, fn]); }
 function harness() {
     const nodes = new Map();
-    const element = () => ({ style: {}, textContent: '', innerHTML: '', disabled: false,
-        classList: { add() {}, remove() {}, toggle() {} }, click() {}, addEventListener() {},
-        setAttribute() {}, append() {}, appendChild() {}, querySelectorAll() { return []; } });
+    const element = (tagName = 'div') => {
+        const el = {
+            tagName: tagName.toUpperCase(),
+            style: {}, textContent: '', innerHTML: '', disabled: false,
+            children: [],
+            classList: { add() {}, remove() {}, toggle() {} }, click() {}, addEventListener() {},
+            setAttribute() {},
+            append(...ch) { this.children.push(...ch); },
+            appendChild(ch) { this.children.push(ch); return ch; },
+            querySelector() { return null; }, querySelectorAll() { return []; },
+            remove() {
+                if (this.id && nodes.has(this.id)) nodes.delete(this.id);
+            }
+        };
+        return new Proxy(el, {
+            set(target, prop, value) {
+                target[prop] = value;
+                if (prop === 'id' && typeof value === 'string') {
+                    nodes.set(value, target);
+                }
+                return true;
+            }
+        });
+    };
+    const bodyEl = element('body');
     const document = { cookie: 'ds_user_id=1; csrftoken=test',
-        getElementById(id) { if (!nodes.has(id)) nodes.set(id, element()); return nodes.get(id); },
-        createElement() { return element(); },
+        body: bodyEl,
+        getElementById(id) {
+            if (nodes.has(id)) return nodes.get(id);
+            if (id === 'maxpland-story-bar' || id === 'maxpland-profile-avatar-btn') return null;
+            const el = element();
+            el.id = id;
+            nodes.set(id, el);
+            return el;
+        },
+        createElement(tag) { return element(tag); },
         querySelector() { return null; }, querySelectorAll() { return []; } };
-    const context = vm.createContext({ document, console, URL, URLSearchParams, AbortController, DOMException,
-        setTimeout() { return 1; }, clearTimeout() {}, setInterval() { return 1; }, clearInterval() {},
+    function FakeXHR() {}
+    FakeXHR.prototype.open = function(m, u) { this.method = m; this.url = u; };
+    FakeXHR.prototype.send = function(b) { this.body = b; };
+    FakeXHR.prototype.dispatchEvent = function() {};
+    const win = {
+        fetch: async (input) => ({ requested: String(typeof input === 'string' ? input : input?.url), status: 200 }),
+        XMLHttpRequest: FakeXHR,
+        navigator: { sendBeacon: (url) => false },
+        innerHeight: 800, innerWidth: 400
+    };
+    const context = vm.createContext({ document, console, URL, URLSearchParams, AbortController, DOMException, Response,
+        setTimeout(fn) { try { fn && fn(); } catch (_) {} return 1; }, clearTimeout() {}, setInterval() { return 1; }, clearInterval() {},
         localStorage: { getItem() { return null; }, setItem() {} }, performance,
-        window: {}, location: { pathname: '/', href: 'https://www.instagram.com/' },
+        window: win, unsafeWindow: win, location: { pathname: '/', href: 'https://www.instagram.com/' },
         alert() {}, confirm() { return true; } });
     const marker = "    if (document.readyState === 'complete' || document.readyState === 'interactive') {";
     assert.equal(source.split(marker).length, 2);
@@ -26,7 +66,8 @@ function harness() {
     vm.runInContext(source.slice(0, source.indexOf(marker)) + `
         globalThis.api = { STATE, IgBridge, MaxPlandVault, runInactiveScan, runRelationshipScan,
             runBatchUnfollow, downloadResolvedMedia, renderRelationshipList, applyUnfollowResult,
-            setFollowStateChip, injectStoryDownloadTools, downloadCurrentStoryMedia, openCurrentStoryMediaTab,
+            setFollowStateChip, injectStoryDownloadTools, downloadCurrentStoryMedia, downloadCurrentStoryCover,
+            getActiveStorySection, pickStoryMedia, resolveCurrentStoryMedia, resolveCurrentStoryCover, installStorySeenInterceptor,
             bindUIEvents, setSleep(fn) { sleep = fn; }, setDownload(fn) { gmDownload = fn; } };
     })();`, context);
     const api = context.api;
@@ -36,8 +77,242 @@ function harness() {
     return { ...api, context, document, nodes };
 }
 
-test('Story uses only native selectors', () => {
+test('Story uses only native selectors and runs at document-start', () => {
     assert.equal(source.includes('section:visible'), false, 'native querySelector throws on :visible');
+    assert.match(source, /\/\/ @run-at\s+document-start/, 'must run at document-start to catch seen beacons');
+});
+
+test('Stealth interceptor drops seen beacons across fetch, XHR, and sendBeacon', async () => {
+    const h = harness();
+    let networkCalls = [];
+    h.context.window.fetch = async (input, init) => {
+        networkCalls.push({ type: 'fetch', url: String(typeof input === 'string' ? input : input?.url), body: init?.body });
+        return { requested: String(typeof input === 'string' ? input : input?.url), status: 200 };
+    };
+    let beaconCalls = [];
+    h.context.window.navigator.sendBeacon = (url, data) => {
+        beaconCalls.push({ url: String(url), data });
+        return true;
+    };
+    let xhrCalls = [];
+    h.context.window.XMLHttpRequest.prototype.send = function(body) {
+        xhrCalls.push({ url: this.__mpSeenUrl, body });
+    };
+
+    vm.runInContext("delete window[Symbol.for('mp_seen_hooked')]", h.context);
+    h.installStorySeenInterceptor();
+
+    const fetchFn = h.context.window.fetch;
+
+    // 1. REST seen endpoint
+    const mockedRest = await fetchFn('https://www.instagram.com/api/v1/stories/reel/seen/');
+    assert.equal(mockedRest.status, 200, 'REST seen mock 200');
+    assert.equal(networkCalls.length, 0, 'REST seen must NOT reach network');
+
+    // 2. GraphQL mutation with viewSeenAt
+    const mockedGql = await fetchFn('https://www.instagram.com/api/graphql', {
+        method: 'POST',
+        body: JSON.stringify({ variables: { viewSeenAt: 1726000000 } })
+    });
+    assert.equal(mockedGql.status, 200, 'GraphQL seen mock 200');
+    assert.equal(networkCalls.length, 0, 'GraphQL seen with viewSeenAt must NOT reach network');
+
+    // 3. Read query (web_profile_info) MUST pass through!
+    const readQuery = await fetchFn('https://www.instagram.com/api/v1/users/web_profile_info/?username=test');
+    assert.equal(networkCalls.length, 1, 'read queries must reach network');
+    assert.match(networkCalls[0].url, /web_profile_info/);
+
+    // 4. sendBeacon seen
+    const beaconBlocked = h.context.window.navigator.sendBeacon('https://www.instagram.com/api/v1/stories/reel/seen/', 'seen_data');
+    assert.equal(beaconBlocked, true);
+    assert.equal(beaconCalls.length, 0, 'sendBeacon seen must NOT reach raw sender');
+
+    // 5. XHR seen
+    const xhr = new h.context.window.XMLHttpRequest();
+    xhr.open('POST', 'https://www.instagram.com/api/v1/stories/reel/seen/');
+    xhr.send('seen=1');
+    assert.equal(xhrCalls.length, 0, 'XHR seen must NOT reach raw send');
+    assert.equal(xhr.status, 200);
+});
+
+test('Ghost off passes seen beacons through untouched', async () => {
+    const h = harness();
+    h.STATE.prefs.stealthStory = false;
+    let reachedNetwork = false;
+    h.context.window.fetch = async (input) => { reachedNetwork = true; return { requested: String(input), status: 200 }; };
+    vm.runInContext("delete window[Symbol.for('mp_seen_hooked')]", h.context);
+    h.installStorySeenInterceptor();
+    const res = await h.context.window.fetch('https://www.instagram.com/api/v1/stories/reel/seen');
+    assert.equal(reachedNetwork, true, 'seen request must pass through when stealth is off');
+    assert.equal(res.requested.includes('/seen'), true);
+});
+
+test('fetchMediaInfo accepts both numerical mediaIds and shortcodes', async () => {
+    const h = harness();
+    const requestedUrls = [];
+    h.IgBridge.request = async (url) => {
+        requestedUrls.push(url);
+        return { items: [{ id: '123', media_type: 1 }] };
+    };
+
+    // Numerical mediaId
+    const item1 = await h.IgBridge.fetchMediaInfo('3456789012345678901');
+    assert.equal(requestedUrls[0], '/api/v1/media/3456789012345678901/info/');
+    assert.equal(item1.id, '123');
+
+    // Shortcode
+    const item2 = await h.IgBridge.fetchMediaInfo('C_abc123');
+    const expectedId = h.IgBridge.shortcodeToMediaId('C_abc123');
+    assert.equal(requestedUrls[1], `/api/v1/media/${expectedId}/info/`);
+});
+
+test('Story media resolution fetches full-res CDN video/image via API when mediaId in URL', async () => {
+    const h = harness();
+    h.context.location.pathname = '/stories/someone/3456789012345678901/';
+    h.IgBridge.fetchMediaInfo = async (mediaId) => ({
+        id: mediaId,
+        media_type: 2,
+        video_versions: [{ url: 'https://cdn.instagram.com/pristine_story.mp4', width: 1080, height: 1920 }],
+        image_versions2: { candidates: [{ url: 'https://cdn.instagram.com/pristine_cover.jpg', width: 1080, height: 1920 }] }
+    });
+
+    const coverRes = await h.resolveCurrentStoryMedia(true);
+    assert.equal(coverRes.url, 'https://cdn.instagram.com/pristine_cover.jpg');
+    assert.equal(coverRes.isVideo, false);
+});
+
+test('Story media resolution falls back to video poster when API unavailable', async () => {
+    const h = harness();
+    h.context.location.pathname = '/stories/someone/';
+    const videoEl = {
+        currentSrc: 'blob:https://www.instagram.com/some-stream-blob',
+        getAttribute: (attr) => attr === 'poster' ? 'https://cdn.instagram.com/video_poster.jpg' : null,
+        checkVisibility: () => true,
+        getBoundingClientRect: () => ({ width: 720, height: 1280, top: 0, bottom: 1280, left: 0, right: 720 })
+    };
+    h.document.querySelectorAll = sel => (sel.includes('video') ? [videoEl] : []);
+
+    const coverRes = await h.resolveCurrentStoryMedia(true);
+    assert.equal(coverRes.url, 'https://cdn.instagram.com/video_poster.jpg');
+    assert.equal(coverRes.isVideo, false);
+});
+
+test('Story toolbar renders only 1 button (Stealth Mode) and omits download buttons', () => {
+    const h = harness();
+    h.context.location.pathname = '/stories/someone/';
+    const container = {
+        tagName: 'SECTION',
+        checkVisibility: () => true,
+        getBoundingClientRect: () => ({ left: 200, right: 600, top: 50, bottom: 850, width: 400, height: 800 }),
+        querySelector: () => null,
+        querySelectorAll: () => []
+    };
+    h.document.querySelectorAll = sel => (sel.includes('section') ? [container] : []);
+    h.injectStoryDownloadTools();
+
+    const bar = h.document.getElementById('maxpland-story-bar');
+    assert.ok(bar, 'story bar must be injected');
+    const buttons = bar.children.filter(c => c.tagName === 'BUTTON');
+    assert.equal(buttons.length, 1, 'must render exactly 1 button: Stealth Mode');
+    assert.ok(buttons.some(b => b.id === 'maxpland-story-stealth-toggle'), 'stealth toggle present');
+    assert.ok(!buttons.some(b => b.id === 'maxpland-story-dl-btn'), 'download story button removed');
+    assert.ok(!buttons.some(b => b.id === 'maxpland-story-cover-btn'), 'cover button removed');
+    assert.ok(!buttons.some(b => (b.innerHTML || '').includes('เปิดแท็บ')), 'open tab button removed');
+});
+
+test('Story actions pick the center/active story, never adjacent side stories', async () => {
+    const h = harness();
+    h.context.window.innerHeight = 900;
+    h.context.window.innerWidth = 1920; // center is 960
+
+    const makeSection = (name, left, right) => ({
+        tagName: 'SECTION',
+        checkVisibility: () => true,
+        getBoundingClientRect: () => ({ left, right, top: 50, bottom: 850, width: right - left, height: 800 }),
+        querySelector(sel) {
+            if (sel.includes('video')) return { currentSrc: `https://cdn.instagram.com/${name}.mp4`, checkVisibility: () => true, getAttribute: () => null, getBoundingClientRect: () => ({ left, right, top: 50, bottom: 850, width: right - left, height: 800 }) };
+            if (sel.includes('img')) return { currentSrc: `https://cdn.instagram.com/${name}.jpg`, checkVisibility: () => true, getAttribute: () => null, getBoundingClientRect: () => ({ left, right, top: 50, bottom: 850, width: right - left, height: 800 }) };
+            if (sel.includes('a')) return { getAttribute: (a) => a === 'href' ? `/stories/${name}/99999/` : null };
+            return null;
+        },
+        querySelectorAll(sel) {
+            const el = this.querySelector(sel);
+            return el ? [el] : [];
+        }
+    });
+
+    const leftSection = makeSection('left_adjacent', 100, 600); // center = 350
+    const centerSection = makeSection('center_active', 710, 1210); // center = 960 (exact viewport center!)
+    const rightSection = makeSection('right_adjacent', 1320, 1820); // center = 1570
+
+    h.document.querySelectorAll = sel => {
+        if (sel.includes('video')) return [leftSection.querySelector('video'), centerSection.querySelector('video'), rightSection.querySelector('video')];
+        if (sel.includes('img')) return [leftSection.querySelector('img'), centerSection.querySelector('img'), rightSection.querySelector('img')];
+        if (sel.includes('section')) return [leftSection, centerSection, rightSection];
+        return [];
+    };
+
+    // Download Story
+    let downloaded = null;
+    h.setDownload(async (url, name) => { downloaded = { url, name }; return 'ok'; });
+    await h.downloadCurrentStoryMedia();
+    assert.ok(downloaded, 'must trigger download');
+    assert.equal(downloaded.url, 'https://cdn.instagram.com/center_active.mp4', 'must download center active story, not left adjacent');
+});
+
+test('Story media resolution safely resolves 1080p MP4 from React Fiber when video is blob without thread lock', async () => {
+    const h = harness();
+    h.context.window.innerHeight = 900;
+    h.context.window.innerWidth = 1920;
+
+    const blobVideo = {
+        tagName: 'VIDEO',
+        currentSrc: 'blob:https://www.instagram.com/1234-abcd',
+        checkVisibility: () => true,
+        getAttribute: () => null,
+        getBoundingClientRect: () => ({ left: 700, right: 1220, top: 0, bottom: 900, width: 520, height: 900 }),
+        '__reactFiber$test': {
+            memoizedProps: {
+                item: {
+                    video_versions: [
+                        { url: 'https://scontent.cdninstagram.com/v/t50/video_sd.mp4', width: 720, height: 1280 },
+                        { url: 'https://scontent.cdninstagram.com/v/t50/video_1080p.mp4', width: 1080, height: 1920 }
+                    ],
+                    image_versions2: {
+                        candidates: [
+                            { url: 'https://scontent.cdninstagram.com/v/t51/cover_1080p.jpg', width: 1080, height: 1920 }
+                        ]
+                    }
+                }
+            }
+        }
+    };
+    h.document.querySelectorAll = sel => (sel.includes('video') ? [blobVideo] : []);
+
+    let downloaded = null;
+    h.setDownload(async (url, name) => { downloaded = { url, name }; return 'ok'; });
+
+    await h.downloadCurrentStoryMedia();
+    assert.ok(downloaded, 'must trigger story download');
+    assert.equal(downloaded.url, 'https://scontent.cdninstagram.com/v/t50/video_1080p.mp4', 'must extract high-res 1080p MP4 from React Fiber');
+});
+
+test('Thumbnail download prefers a real cover image over the tiny avatar', async () => {
+    const h = harness();
+    h.context.window.innerHeight = 800; h.context.window.innerWidth = 400;
+    const bigImg = { currentSrc: 'https://cdn.instagram.com/story_cover.jpg', checkVisibility: () => true,
+        getAttribute: () => null,
+        getBoundingClientRect: () => ({ width: 720, height: 1280, top: 0, bottom: 1280, left: 0, right: 720 }) };
+    const avatarImg = { currentSrc: 'https://cdn.instagram.com/avatar_50x50.jpg', checkVisibility: () => true,
+        getAttribute: () => null,
+        getBoundingClientRect: () => ({ width: 40, height: 40, top: 10, bottom: 50, left: 10, right: 50 }) };
+    h.document.querySelectorAll = sel => (sel.includes('video') ? [] : [avatarImg, bigImg]);
+    let downloaded = null;
+    h.setDownload(async (url, name) => { downloaded = { url, name }; return 'ok'; });
+    await h.downloadCurrentStoryMedia(true);
+    assert.ok(downloaded, 'download must start for a visible story');
+    assert.equal(downloaded.url, 'https://cdn.instagram.com/story_cover.jpg', 'must pick the story cover, not the 50px avatar');
+    assert.match(downloaded.name, /\.jpg$/);
 });
 
 test('Whitelist blocks request at the action boundary', async () => {

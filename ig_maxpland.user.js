@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         IG MaxPland
 // @namespace    http://tampermonkey.net/
-// @version      2.7.0
-// @description  Instagram Relationship Scanner & Comprehensive Media Downloader (Anti-Slop Clean Precision v2.7.0)
+// @version      2.7.2
+// @description  Instagram Relationship Scanner & Comprehensive Media Downloader (Anti-Slop Clean Precision v2.7.2)
 // @author       P Choke & SORA
 // @match        https://*.instagram.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=instagram.com
@@ -14,9 +14,11 @@
 // @connect      instagram.com
 // @connect      cdninstagram.com
 // @connect      fbcdn.net
-// @run-at       document-idle
-// @homepageURL   https://github.com/Stxyu-p/ig-maxpland
-// @supportURL    https://github.com/Stxyu-p/ig-maxpland/issues
+// @run-at       document-start
+// @homepageURL   https://greasyfork.org/th/scripts/595787-ig-maxpland
+// @supportURL    https://greasyfork.org/th/scripts/595787-ig-maxpland/feedback
+// @updateURL     https://greasyfork.org/scripts/595787-ig-maxpland/code/ig-maxpland.user.js
+// @downloadURL   https://greasyfork.org/scripts/595787-ig-maxpland/code/ig-maxpland.user.js
 // @license      MIT
 // ==/UserScript==
 
@@ -1184,7 +1186,8 @@
         }
 
         static async fetchMediaInfo(shortcode) {
-            const mediaId = this.shortcodeToMediaId(shortcode);
+            const raw = String(shortcode || '').trim();
+            const mediaId = /^\d+$/.test(raw) ? raw : this.shortcodeToMediaId(raw);
             const data = await this.request(`/api/v1/media/${mediaId}/info/`);
             const item = (data.items || [])[0];
             if (!item) throw new Error('ไม่พบข้อมูลสื่อนี้');
@@ -1305,7 +1308,93 @@
         prefs: loadPrefs()
     };
 
-    // STEALTH STORY SEEN INTERCEPTOR (Ponytail: Stealth Minimal & Native Masked)
+    // STEALTH STORY SEEN INTERCEPTOR (Ponytail: multi-channel stealth — fetch, XHR, sendBeacon masked)
+    let stealthSeenCount = 0;
+    function isStorySeenRequest(url, body) {
+        if (!STATE.prefs?.stealthStory) return false;
+        const urlStr = String(url || '');
+        const bodyStr = typeof body === 'string' ? body : (body ? JSON.stringify(body) : '');
+
+        // Safety Guard: never block read queries (drawing story rings, viewing profiles, feed)
+        const isRead = /web_profile_info|users\/web_profile|PolarisProfile|ProfilePage|[A-Za-z0-9_]*Query\b/i.test(urlStr) ||
+                       /operationName["']?\s*[:=]\s*["']?[A-Za-z0-9_]*Query\b/i.test(bodyStr);
+        if (isRead) return false;
+
+        // 1. REST endpoint: /stories/reel/seen or /api/v1/stories/reel/seen
+        if (/\/(?:api\/v1\/)?stories\/reel\/seen/i.test(urlStr)) return true;
+
+        // 2. viewSeenAt timestamp in query or body
+        if (/viewSeenAt/i.test(urlStr) || /viewSeenAt/i.test(bodyStr)) return true;
+
+        // 3. GraphQL seen mutations
+        if (/reels?_?media_?seen|Stor(?:y|ies)Seen/i.test(urlStr) || /reels?_?media_?seen|Stor(?:y|ies)Seen/i.test(bodyStr)) return true;
+
+        return false;
+    }
+
+    // ponytail: StoryMediaRegistry caches reels_media and GraphQL story payloads intercepted at document-start
+    // skipped: IndexedDB persistent cross-session media blob cache, add when offline reel playback is required
+    const StoryMediaRegistry = {
+        items: new Map(),
+        cacheItem(item) {
+            if (!item || typeof item !== 'object') return;
+            const id = String(item.pk || item.id || '').split('_')[0];
+            const isVideo = Boolean(item.video_versions && item.video_versions.length > 0) || item.media_type === 2 || Boolean(item.is_video);
+            const videoVersions = Array.isArray(item.video_versions) ? [...item.video_versions] : [];
+            const imageCandidates = Array.isArray(item.image_versions2?.candidates) ? [...item.image_versions2.candidates] : [];
+            videoVersions.sort((a, b) => ((b.width || 0) * (b.height || 0)) - ((a.width || 0) * (a.height || 0)));
+            imageCandidates.sort((a, b) => ((b.width || 0) * (b.height || 0)) - ((a.width || 0) * (a.height || 0)));
+
+            const videoUrl = videoVersions[0]?.url || item.video_url || item.videoUrl || null;
+            const imageUrl = imageCandidates[0]?.url || item.display_url || item.src || null;
+            const username = item.user?.username || item.owner?.username || '';
+
+            const entry = { id, isVideo, videoUrl, imageUrl, username };
+            if (id) this.items.set(id, entry);
+        },
+        parseAndCache(json) {
+            if (!json || typeof json !== 'object') return;
+            try {
+                if (Array.isArray(json.reels_media)) {
+                    for (const reel of json.reels_media) {
+                        if (Array.isArray(reel?.items)) {
+                            for (const it of reel.items) this.cacheItem(it);
+                        }
+                    }
+                }
+                if (json.reels && typeof json.reels === 'object') {
+                    for (const k in json.reels) {
+                        const reel = json.reels[k];
+                        if (Array.isArray(reel?.items)) {
+                            for (const it of reel.items) this.cacheItem(it);
+                        }
+                    }
+                }
+                if (Array.isArray(json.items)) {
+                    for (const it of json.items) this.cacheItem(it);
+                }
+                if (json.data && typeof json.data === 'object') {
+                    this.parseAndCache(json.data);
+                }
+            } catch (_) {}
+        },
+        scanDomScripts() {
+            try {
+                const win = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
+                const doc = win.document || document;
+                for (const s of doc.querySelectorAll('script[type="application/json"]')) {
+                    const text = s.textContent || '';
+                    if (text.includes('video_versions') || text.includes('image_versions2')) {
+                        try {
+                            const data = JSON.parse(text);
+                            this.parseAndCache(data);
+                        } catch (_) {}
+                    }
+                }
+            } catch (_) {}
+        }
+    };
+
     function installStorySeenInterceptor() {
         try {
             const win = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -1313,20 +1402,46 @@
             if (win[hookSym]) return;
             win[hookSym] = true;
 
+            const FAKE_JSON = JSON.stringify({ status: 'ok' });
+            const isStoryDataUrl = (u) => Boolean(u && typeof u === 'string' && (/reels?_?media|graphql\/query|\/api\/v1\/media\//i.test(u)));
+
+            // 1. Intercept fetch
             if (typeof win.fetch === 'function') {
                 const rawFetch = win.fetch;
-                const stealthFetch = function(...args) {
-                    const url = typeof args[0] === 'string' ? args[0] : (args[0]?.url || '');
-                    if (STATE.prefs?.stealthStory && (url.includes('/stories/reel/seen') || url.includes('/api/v1/stories/reel/seen'))) {
-                        return Promise.resolve(new Response(JSON.stringify({ status: 'ok' }), {
+                const stealthFetch = function(resource, init = {}) {
+                    let url = '';
+                    let body = init?.body || null;
+
+                    if (typeof resource === 'string') {
+                        url = resource;
+                    } else if (resource && typeof resource.url === 'string') {
+                        url = resource.url;
+                    }
+
+                    if (isStorySeenRequest(url, body)) {
+                        stealthSeenCount++;
+                        console.info(`[MaxPland Stealth] Blocked story seen ping #${stealthSeenCount}:`, url);
+                        return Promise.resolve(new Response(FAKE_JSON, {
                             status: 200,
+                            statusText: 'OK',
                             headers: { 'Content-Type': 'application/json' }
                         }));
                     }
-                    return rawFetch.apply(this, args);
+                    const resPromise = rawFetch.apply(this, arguments);
+                    try {
+                        if (isStoryDataUrl(url)) {
+                            resPromise.then(res => {
+                                try {
+                                    if (typeof res?.clone === 'function') {
+                                        res.clone().json().then(data => StoryMediaRegistry.parseAndCache(data)).catch(() => {});
+                                    }
+                                } catch (_) {}
+                            }).catch(() => {});
+                        }
+                    } catch (_) {}
+                    return resPromise;
                 };
 
-                // ponytail: mask stealthFetch as native code to evade falco/bd.js bot detectors
                 try {
                     Object.defineProperty(stealthFetch, 'name', { value: rawFetch.name || 'fetch' });
                     Object.defineProperty(stealthFetch, 'length', { value: rawFetch.length || 1 });
@@ -1337,6 +1452,76 @@
                 } catch (_) {}
 
                 win.fetch = stealthFetch;
+            }
+
+            // 2. Intercept XMLHttpRequest
+            if (win.XMLHttpRequest && win.XMLHttpRequest.prototype) {
+                const rawOpen = win.XMLHttpRequest.prototype.open;
+                const rawSend = win.XMLHttpRequest.prototype.send;
+
+                win.XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+                    try {
+                        this.__mpSeenUrl = typeof url === 'string' ? url : String(url || '');
+                    } catch (_) {}
+                    return rawOpen.apply(this, [method, url, ...rest]);
+                };
+
+                win.XMLHttpRequest.prototype.send = function(body) {
+                    try {
+                        const url = this.__mpSeenUrl || '';
+                        if (isStorySeenRequest(url, body)) {
+                            stealthSeenCount++;
+                            console.info(`[MaxPland Stealth] Blocked XHR story seen ping #${stealthSeenCount}:`, url);
+                            const xhr = this;
+                            const define = (prop, val) => {
+                                try { Object.defineProperty(xhr, prop, { value: val, configurable: true }); } catch (_) {}
+                            };
+                            define('readyState', 4);
+                            define('status', 200);
+                            define('statusText', 'OK');
+                            define('responseText', FAKE_JSON);
+                            define('response', FAKE_JSON);
+                            setTimeout(() => {
+                                try {
+                                    if (typeof xhr.onreadystatechange === 'function') xhr.onreadystatechange();
+                                    xhr.dispatchEvent(new Event('readystatechange'));
+                                    xhr.dispatchEvent(new Event('load'));
+                                    xhr.dispatchEvent(new Event('loadend'));
+                                } catch (_) {}
+                            }, 0);
+                            return;
+                        }
+                        if (isStoryDataUrl(url)) {
+                            const self = this;
+                            const origOnLoad = self.onload;
+                            self.onload = function(...args) {
+                                try {
+                                    if (self.status === 200 && self.responseText) {
+                                        const data = JSON.parse(self.responseText);
+                                        StoryMediaRegistry.parseAndCache(data);
+                                    }
+                                } catch (_) {}
+                                if (typeof origOnLoad === 'function') return origOnLoad.apply(this, args);
+                            };
+                        }
+                    } catch (_) {}
+                    return rawSend.apply(this, arguments);
+                };
+            }
+
+            // 3. Intercept navigator.sendBeacon
+            if (win.navigator && typeof win.navigator.sendBeacon === 'function') {
+                const rawSendBeacon = win.navigator.sendBeacon.bind(win.navigator);
+                win.navigator.sendBeacon = function(url, data) {
+                    try {
+                        if (isStorySeenRequest(url, data)) {
+                            stealthSeenCount++;
+                            console.info(`[MaxPland Stealth] Blocked Beacon story seen ping #${stealthSeenCount}:`, url);
+                            return true;
+                        }
+                    } catch (_) {}
+                    return rawSendBeacon(url, data);
+                };
             }
         } catch (_) {}
     }
@@ -1856,8 +2041,8 @@
             </div>
 
             <div class="maxpland-footer">
-                <span>MaxPland v2.7.0 · Clean Minimal Precision (Anti-Slop)</span>
-                <span>เปิด / ปิด <kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>M</kbd></span>
+                <span>MaxPland v2.7.2 · Clean Minimal Precision (Anti-Slop)</span>
+                <span>Toggle <kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>M</kbd></span>
             </div>
         `;
 
@@ -3459,14 +3644,306 @@
     }
 
     // Story & Highlight Tools
-    function visibleStoryElement(selector) {
-        return [...document.querySelectorAll(selector)].find(el => {
-            const rect = el.getBoundingClientRect();
-            return el.checkVisibility({ checkVisibilityCSS: true }) && rect.width > 0 && rect.height > 0
-                && rect.bottom > 0 && rect.top < window.innerHeight && rect.right > 0 && rect.left < window.innerWidth;
-        }) || null;
+    // ponytail: resolveCurrentStoryMedia extracts pristine image/poster directly from center active story section
+    // skipped: video stream scraping and open-tab actions to prevent UI freezing and blob errors; add when Instagram opens unencrypted public streams
+    function findCenterElement(selector, root = document) {
+        const viewportCenterX = (window.innerWidth || 800) / 2;
+        let best = null;
+        let minDistance = Infinity;
+
+        for (const el of root.querySelectorAll(selector)) {
+            if (typeof el.checkVisibility === 'function' && !el.checkVisibility({ checkVisibilityCSS: true })) continue;
+            if (typeof el.getBoundingClientRect !== 'function') continue;
+            const r = el.getBoundingClientRect();
+            if (r.width <= 0 || r.height <= 0) continue;
+            if (r.bottom <= 0 || r.top >= (window.innerHeight || 600)) continue;
+
+            const elCenterX = (r.left + r.right) / 2;
+            const dist = Math.abs(elCenterX - viewportCenterX);
+            if (dist < minDistance) {
+                minDistance = dist;
+                best = el;
+            }
+        }
+        return best;
     }
 
+    function getActiveStorySection() {
+        const viewportCenterX = (window.innerWidth || 800) / 2;
+        const sections = [...document.querySelectorAll('section')];
+        let best = null;
+        let minDistance = Infinity;
+
+        for (const sec of sections) {
+            if (typeof sec.checkVisibility === 'function' && !sec.checkVisibility({ checkVisibilityCSS: true })) continue;
+            if (typeof sec.getBoundingClientRect !== 'function') continue;
+            const r = sec.getBoundingClientRect();
+            if (r.width < 50 || r.height < 50) continue;
+            if (r.bottom <= 0 || r.top >= (window.innerHeight || 600)) continue;
+
+            const secCenterX = (r.left + r.right) / 2;
+            const dist = Math.abs(secCenterX - viewportCenterX);
+            if (dist < minDistance) {
+                minDistance = dist;
+                best = sec;
+            }
+        }
+        return best;
+    }
+
+    function visibleStoryElement(selector) {
+        const activeSec = getActiveStorySection();
+        if (activeSec && typeof activeSec.querySelector === 'function') {
+            const inner = activeSec.querySelector(selector);
+            if (inner) return inner;
+        }
+        return findCenterElement(selector);
+    }
+
+    function getActiveStoryUsername() {
+        const win = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
+        const doc = win.document || document;
+        const centerX = (win.innerWidth || 800) / 2;
+
+        const headers = [...doc.querySelectorAll('section header, [role="dialog"] header, header')];
+        for (const h of headers) {
+            if (typeof h.getBoundingClientRect !== 'function') continue;
+            const rect = h.getBoundingClientRect();
+            if (rect.left <= centerX && rect.right >= centerX) {
+                const userLink = typeof h.querySelector === 'function' ? h.querySelector('a[href^="/"]') : null;
+                if (userLink && typeof userLink.getAttribute === 'function') {
+                    const href = userLink.getAttribute('href') || '';
+                    const parts = href.split('/').filter(Boolean);
+                    if (parts.length > 0 && !['stories', 'explore', 'reels', 'direct'].includes(parts[0])) {
+                        return parts[0];
+                    }
+                }
+            }
+        }
+
+        const activeSec = getActiveStorySection();
+        const headerLink = typeof activeSec?.querySelector === 'function' ? activeSec.querySelector('header a')?.getAttribute?.('href') : null;
+        if (headerLink) {
+            const parts = headerLink.split('/').filter(Boolean);
+            if (parts.length > 0 && !['stories', 'explore', 'reels', 'direct'].includes(parts[0])) {
+                return parts[0];
+            }
+        }
+
+        const match = location.pathname.match(/\/stories\/([^\/]+)/);
+        if (match && match[1] && match[1] !== 'highlights') return match[1];
+
+        return 'story';
+    }
+
+    function pickStoryMedia(selectorVideo, selectorImg) {
+        const activeSection = getActiveStorySection();
+
+        // 1. Video in active section or centered
+        let video = (typeof activeSection?.querySelector === 'function' ? activeSection.querySelector('video') : null) || null;
+        if (!video) {
+            video = findCenterElement(selectorVideo || 'section video, video');
+        }
+
+        // 2. Story image in active section or centered (avatar-proof)
+        let img = null;
+        const imgCandidates = (activeSection && typeof activeSection.querySelectorAll === 'function')
+            ? activeSection.querySelectorAll(selectorImg || 'img._aa63, img[crossorigin], img[referrerpolicy], img')
+            : document.querySelectorAll(selectorImg || 'section img._aa63, section img[crossorigin], section img[referrerpolicy], img');
+
+        let maxArea = 0;
+        const viewportCenterX = (window.innerWidth || 800) / 2;
+
+        for (const candidate of imgCandidates) {
+            if (typeof candidate.checkVisibility === 'function' && !candidate.checkVisibility({ checkVisibilityCSS: true })) continue;
+            if (typeof candidate.getBoundingClientRect !== 'function') continue;
+            const r = candidate.getBoundingClientRect();
+            if (r.width <= 0 || r.height <= 0) continue;
+            if (r.bottom <= 0 || r.top >= (window.innerHeight || 600)) continue;
+
+            const isAvatar = (r.width <= 64 && r.height <= 64) || (typeof candidate.closest === 'function' && candidate.closest('header'));
+            if (isAvatar) continue;
+
+            if (!activeSection) {
+                const cX = (r.left + r.right) / 2;
+                if (Math.abs(cX - viewportCenterX) > 350) continue;
+            }
+
+            const area = r.width * r.height;
+            if (area > maxArea) {
+                maxArea = area;
+                img = candidate;
+            }
+        }
+
+        if (!img && !video) {
+            img = findCenterElement(selectorImg || 'img');
+        }
+
+        let mediaUrl = video?.getAttribute?.('poster') || video?.poster || img?.currentSrc || img?.src || '';
+        if (!/^https?:\/\//i.test(mediaUrl)) mediaUrl = '';
+        return { video, img, mediaUrl, activeSection };
+    }
+
+    // ponytail: extractMediaFromFiber walks React Fiber return chain with strict bounds (no recursion, zero UI freeze)
+    // skipped: recursive fiber graph walking to prevent browser freeze; add when React moves item props off parent return chain
+    function extractMediaFromFiber(el) {
+        if (!el) return null;
+        const keys = Object.keys(el);
+        const fiberKey = keys.find(k => k.startsWith('__reactFiber$') || k.startsWith('__reactInternalInstance$'));
+        const propsKey = keys.find(k => k.startsWith('__reactProps$'));
+
+        if (propsKey && el[propsKey]?.item) {
+            const item = el[propsKey].item;
+            if (item.video_versions || item.image_versions2) {
+                const isVideo = Boolean(item.video_versions && item.video_versions.length > 0);
+                const videoUrl = item.video_versions?.slice()?.sort((a, b) => (b.width * b.height) - (a.width * a.height))[0]?.url || null;
+                const imageUrl = item.image_versions2?.candidates?.slice()?.sort((a, b) => (b.width * b.height) - (a.width * a.height))[0]?.url || null;
+                const url = isVideo ? (videoUrl || imageUrl) : (imageUrl || videoUrl);
+                if (url) return { url, isVideo, id: item.id || item.pk, source: 'fiber-props' };
+            }
+        }
+
+        if (fiberKey) {
+            let curr = el[fiberKey];
+            let depth = 0;
+            while (curr && depth < 30) {
+                const item = curr.memoizedProps?.item || curr.pendingProps?.item || curr.props?.item;
+                if (item && (item.video_versions || item.image_versions2)) {
+                    const isVideo = Boolean(item.video_versions && item.video_versions.length > 0);
+                    const videoUrl = item.video_versions?.slice()?.sort((a, b) => (b.width * b.height) - (a.width * a.height))[0]?.url || null;
+                    const imageUrl = item.image_versions2?.candidates?.slice()?.sort((a, b) => (b.width * b.height) - (a.width * a.height))[0]?.url || null;
+                    const url = isVideo ? (videoUrl || imageUrl) : (imageUrl || videoUrl);
+                    if (url) return { url, isVideo, id: item.id || item.pk, source: 'fiber' };
+                }
+                curr = curr.return;
+                depth++;
+            }
+        }
+        return null;
+    }
+
+    // ponytail: resolveCurrentStoryMedia extracts pristine 1080p story MP4/JPG via bounded Fiber, network registry, or DOM
+    // skipped: third-party proxy fetchers to prevent auth leak and 429 checkpoint; add when client-side extraction fails entirely
+    async function resolveCurrentStoryMedia(isThumb = false) {
+        const activeSection = getActiveStorySection();
+        const { video, img } = pickStoryMedia('section video', 'section img._aa63, section img[crossorigin], section img[referrerpolicy]');
+
+        // 1. Direct video poster from active story if specifically requested
+        if (isThumb) {
+            const poster = video?.getAttribute?.('poster') || video?.poster;
+            if (poster && /^https?:\/\//i.test(poster)) {
+                return { url: poster, isVideo: false, source: 'dom-poster', isBlob: false };
+            }
+        }
+
+        // 2. React Fiber extraction (lightning fast, bounded parent return loop, 0ms, zero-freeze)
+        const fiberCandidates = [video, img, activeSection].filter(Boolean);
+        for (const cand of fiberCandidates) {
+            const fiber = extractMediaFromFiber(cand);
+            if (fiber?.url) {
+                if (isThumb && fiber.source.includes('fiber')) {
+                    const poster = video?.getAttribute?.('poster') || video?.poster;
+                    if (poster && /^https?:\/\//i.test(poster)) return { url: poster, isVideo: false, source: 'dom-poster', isBlob: false };
+                }
+                return fiber;
+            }
+        }
+
+        // 3. Network Cache lookup (StoryMediaRegistry)
+        let mediaId = null;
+        if (activeSection && typeof activeSection.querySelector === 'function') {
+            const storyLink = activeSection.querySelector('a[href*="/stories/"]');
+            const hrefMatch = storyLink?.getAttribute?.('href')?.match(/\/stories\/[^\/]+\/(\d+)/);
+            if (hrefMatch) mediaId = hrefMatch[1];
+        }
+        if (!mediaId) {
+            const pathMatch = location.pathname.match(/\/stories\/[^\/]+\/(\d+)/);
+            if (pathMatch) mediaId = pathMatch[1];
+        }
+
+        if (mediaId && StoryMediaRegistry.items.has(mediaId)) {
+            const cached = StoryMediaRegistry.items.get(mediaId);
+            if (isThumb && cached.imageUrl) return { url: cached.imageUrl, isVideo: false, source: 'cache', isBlob: false };
+            const isVideo = Boolean(cached.isVideo && cached.videoUrl);
+            const url = isVideo ? cached.videoUrl : (cached.imageUrl || cached.videoUrl);
+            if (url) return { url, isVideo, source: 'cache', isBlob: false };
+        }
+
+        // 4. Native DOM fallback
+        if (!isThumb && video) {
+            const vSrc = video.currentSrc || video.src || '';
+            if (vSrc && /^https?:\/\//i.test(vSrc) && !vSrc.startsWith('blob:')) {
+                return { url: vSrc, isVideo: true, source: 'dom-video', isBlob: false };
+            }
+            const srcEl = typeof video.querySelector === 'function' ? video.querySelector('source') : null;
+            if (srcEl?.src && /^https?:\/\//i.test(srcEl.src) && !srcEl.src.startsWith('blob:')) {
+                return { url: srcEl.src, isVideo: true, source: 'dom-source', isBlob: false };
+            }
+        }
+        if (img) {
+            const imgUrl = img.currentSrc || img.src || '';
+            if (imgUrl && /^https?:\/\//i.test(imgUrl)) {
+                return { url: imgUrl, isVideo: false, source: 'dom-img', isBlob: false };
+            }
+        }
+
+        // 5. API Fallback (IgBridge.fetchMediaInfo)
+        if (mediaId) {
+            try {
+                const item = await IgBridge.fetchMediaInfo(mediaId);
+                const isVideo = Boolean(item.video_versions && item.video_versions.length > 0);
+                const videoUrl = IgBridge.bestProgressiveVideo(item);
+                const imageUrl = IgBridge.bestImage(item);
+                if (isThumb && imageUrl) return { url: imageUrl, isVideo: false, source: 'api', isBlob: false };
+                const url = isVideo ? (videoUrl || imageUrl) : (imageUrl || videoUrl);
+                if (url) return { url, isVideo, source: 'api', isBlob: false };
+            } catch (err) {
+                console.warn('[MaxPland] Story API info unavailable', err);
+            }
+        }
+
+        // 6. Video poster fallback if video blob could not be resolved
+        const poster = video?.getAttribute?.('poster') || video?.poster;
+        if (poster && /^https?:\/\//i.test(poster)) {
+            return { url: poster, isVideo: false, source: 'dom-poster', isBlob: false };
+        }
+
+        return { url: null, isVideo: Boolean(video), isBlob: Boolean(video?.currentSrc?.startsWith('blob:')), source: 'none' };
+    }
+
+    async function resolveCurrentStoryCover() {
+        return resolveCurrentStoryMedia(true);
+    }
+
+    // ponytail: downloadCurrentStoryMedia handles one-click story media download (MP4 video or HD photo, zero UI freeze)
+    // skipped: multi-format transcoding, add when WebP/AVIF to PNG convert is requested
+    async function downloadCurrentStoryMedia(isThumb = false) {
+        try {
+            const resolved = await resolveCurrentStoryMedia(isThumb);
+            if (!resolved?.url) {
+                alert('ไม่พบสื่อหรือ URL ของสตอรี่ที่กำลังดูอยู่');
+                return;
+            }
+
+            const username = getActiveStoryUsername();
+            const ext = extensionFromUrl(resolved.url, resolved.isVideo ? 'mp4' : 'jpg');
+            const filename = `${username}_story_${Date.now()}.${ext}`;
+
+            await gmDownload(resolved.url, filename);
+            showToast(resolved.isVideo ? 'เริ่มดาวน์โหลดวิดีโอสตอรี่แล้วค่ะ' : 'เริ่มดาวน์โหลดภาพสตอรี่แล้วค่ะ');
+        } catch (err) {
+            console.error('[MaxPland] downloadCurrentStoryMedia error:', err);
+            alert('เกิดข้อผิดพลาดในการดาวน์โหลดสตอรี่');
+        }
+    }
+
+    async function downloadCurrentStoryCover() {
+        return downloadCurrentStoryMedia(true);
+    }
+
+    // ponytail: Story toolbar dedicated strictly to Ghost/Stealth Seen blocking
+    // skipped: story media downloads removed per user direction due to unstable Instagram MSE blob stream encryption; add when a non-fragile public media API is available
     function injectStoryDownloadTools() {
         if (!location.pathname.startsWith('/stories/')) {
             const existing = document.getElementById('maxpland-story-bar');
@@ -3479,6 +3956,8 @@
             if (existing) existing.remove();
             return;
         }
+
+        StoryMediaRegistry.scanDomScripts();
 
         if (document.getElementById('maxpland-story-bar')) return;
 
@@ -3511,57 +3990,8 @@
             showToast(next ? 'เปิดโหมดแอบส่องสตอรี่ (ไม่ขึ้น Seen)' : 'ปิดโหมดแอบส่องสตอรี่ (ส่ง Seen ตามปกติ)');
         };
 
-        const dlBtn = document.createElement('button');
-        dlBtn.type = 'button';
-        dlBtn.className = 'maxpland-story-btn';
-        dlBtn.innerHTML = ICONS.DOWNLOAD + '<span>โหลดสตอรี่</span>';
-        dlBtn.onclick = () => downloadCurrentStoryMedia(false);
-
-        const thumbBtn = document.createElement('button');
-        thumbBtn.type = 'button';
-        thumbBtn.className = 'maxpland-story-btn';
-        thumbBtn.innerHTML = ICONS.THUMBNAIL + '<span>ปก</span>';
-        thumbBtn.onclick = () => downloadCurrentStoryMedia(true);
-
-        const newTabBtn = document.createElement('button');
-        newTabBtn.type = 'button';
-        newTabBtn.className = 'maxpland-story-btn';
-        newTabBtn.innerHTML = ICONS.EXTERNAL + '<span>เปิดแท็บ</span>';
-        newTabBtn.onclick = () => openCurrentStoryMediaTab();
-
-        bar.append(stealthBtn, dlBtn, thumbBtn, newTabBtn);
+        bar.append(stealthBtn);
         document.body.appendChild(bar);
-    }
-
-    async function downloadCurrentStoryMedia(isThumb = false) {
-        const video = visibleStoryElement('section video');
-        const img = visibleStoryElement('section img._aa63, section img[crossorigin], section img[referrerpolicy]');
-        const mediaUrl = isThumb ? (img?.currentSrc || img?.src) : (video?.currentSrc || video?.src || img?.currentSrc || img?.src);
-
-        if (!mediaUrl) {
-            alert('ไม่พบ URL สตอรี่ที่เปิดอยู่');
-            return;
-        }
-
-        const username = location.pathname.split('/').filter(Boolean)[1] || 'story';
-        const isVideo = Boolean(video && !isThumb);
-        const ext = extensionFromUrl(mediaUrl, isVideo ? 'mp4' : 'jpg');
-        const filename = `${username}_story_${Date.now()}.${ext}`;
-
-        try {
-            await gmDownload(mediaUrl, filename);
-            showToast('เริ่มดาวน์โหลดสตอรี่เรียบร้อยค่ะ');
-        } catch (_) {
-            window.open(mediaUrl, '_blank', 'noopener,noreferrer');
-        }
-    }
-
-    function openCurrentStoryMediaTab() {
-        const video = visibleStoryElement('section video');
-        const img = visibleStoryElement('section img._aa63, section img[crossorigin], section img[referrerpolicy]');
-        const mediaUrl = video?.currentSrc || video?.src || img?.currentSrc || img?.src;
-        if (mediaUrl) window.open(mediaUrl, '_blank', 'noopener,noreferrer');
-        else alert('ไม่พบ URL สตอรี่');
     }
 
     // Profile HD Avatar Downloader

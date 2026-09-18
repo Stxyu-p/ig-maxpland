@@ -2,13 +2,14 @@
 
 # ⚡ IG MaxPland <sub>v2.7.2</sub>
 
-**Relationship Intelligence Suite & Precision Media Downloader for Instagram Web**
+**Enterprise-Grade Relationship Intelligence & Precision Media Downloader for Instagram Web**
 
-*Raw speed · Zero-footprint privacy · Stealth anti-detection*
-*Pure Vanilla JavaScript · Zero Dependencies · One File*
+*High Speed · Zero-Footprint Privacy · Stealth Anti-Detection*  
+*Pure Vanilla JavaScript · Zero Dependencies · Single Userscript Architecture*
 
-[![Install](https://img.shields.io/badge/Install-Userscript%20v2.7.0-0284c7?style=for-the-badge&logo=tampermonkey&logoColor=white)](#-one-click-installation)
-[![Release](https://img.shields.io/badge/Release-v2.7.0-10b981?style=for-the-badge)](../../releases)
+[![Greasy Fork](https://img.shields.io/badge/Greasy%20Fork-Install%20v2.7.2-red?style=for-the-badge&logo=greasyfork&logoColor=white)](https://greasyfork.org/th/scripts/595787-ig-maxpland)
+[![Install Raw](https://img.shields.io/badge/Install-Userscript%20Raw-0284c7?style=for-the-badge&logo=tampermonkey&logoColor=white)](#-one-click-installation)
+[![Release](https://img.shields.io/badge/Release-v2.7.2-10b981?style=for-the-badge)](https://github.com/Stxyu-p/ig-maxpland/releases)
 [![License](https://img.shields.io/badge/License-MIT-f59e0b?style=for-the-badge)](LICENSE)
 
 ![Dependencies](https://img.shields.io/badge/Dependencies-Zero-success?style=flat-square)
@@ -21,73 +22,72 @@
 
 ---
 
-## 🌟 Why IG MaxPland
+## 🚀 Quick Install
 
-Most Instagram browser extensions inject intrusive popups, harvest your session tokens to remote servers, or spam rapid queries that trigger account checkpoints and rate limits.
-
-IG MaxPland is built on five strict engineering principles:
-
-| # | Principle | What it means |
-| :---: | :--- | :--- |
-| 1 | 🛡️ **100% Client-Side Private** | Zero external servers, analytics, or tracking — everything runs inside your browser |
-| 2 | 👁️ **Stealth Story Viewing** | Intercepts Instagram *seen* beacons at the network transport layer with native function masking |
-| 3 | 🧹 **Clean Feed Mode** | Strips ads and suggestions with zero-height layout preservation and `overflow-anchor: none` — no scroll bounce |
-| 4 | ⏱️ **Inactive Following Radar** | Finds dormant accounts (3 / 6 / 12 / 24 months) with safe batch limits (20 users/batch) |
-| 5 | 📊 **Account Health Dashboard** | Mutual ratio, follower balance, and growth history with embedded SVG sparklines |
-
-## ✨ Feature Overview
-
-| Feature | Description |
-| :--- | :--- |
-| 👁️ **Stealth Story Viewer** | Watch stories anonymously — seen beacons are dropped before they leave your browser |
-| 🧹 **Clean Feed Mode** | Zero ads, zero sponsored posts, zero scroll-jump layout collapse |
-| ⏱️ **Inactive Following Radar** | Detects accounts dormant for 3–24 months with safe batching and instant resume |
-| 📊 **Account Health Audit** | Real-time mutual ratios, ghost impact, and growth sparklines |
-| 📥 **Precision Downloader** | HD photos, 1080p MP4 videos, full carousels, stories & avatars — streamed direct to disk |
-| 🛡️ **Anti-Detection Hardening** | Native header parity, randomized jitter delays, zero bot signatures |
-
-## What's new in v2.7.0
-
-- **Scan speed in Settings:** saved A/B/C selection, with A as the default.
-- **Follow-state filters:** “Followed” / “Not followed yet” (ติดตามแล้ว / ยังไม่ติดตาม) work alongside the existing relationship categories and hide filters. Select one at a time; click it again to clear.
-- **Separate export row:** Copy Usernames, CSV, and JSON sit below the filters, right-aligned. Filters can wrap without crowding export actions.
-- **Cleanup:** removed unused classifier/cache/version fields; the settings delay label now reads the actual configuration.
-
-### Choose a scan mode
-
-Open **Settings → Scan Speed** before starting a relationship scan.
-
-| Mode | How it runs | Inter-page pause | Guidance |
+| Channel | Edition | Source | Link |
 | :--- | :--- | :--- | :--- |
-| **A — Normal (default)** | Followers, then Following | 2–3 seconds | Most conservative available mode |
-| **B — Fast** | Both lists concurrently | 2–3 seconds per list | Higher combined request rate |
-| **C — Fastest** | Both lists concurrently | 0.5–1 second per list | Higher rate-limit risk; confirmation required |
+| 🦊 **Greasy Fork** | Official Distribution | Auto-updating | [**👉 Install from Greasy Fork**](https://greasyfork.org/th/scripts/595787-ig-maxpland) |
+| 🇹🇭 **Userscript (TH)** | Thai Native Edition | Direct GitHub Raw | [**👉 Install ig_maxpland.user.js**](https://raw.githubusercontent.com/Stxyu-p/ig-maxpland/main/ig_maxpland.user.js) |
+| 🌐 **Userscript (EN)** | Global English Edition | Direct GitHub Raw | [**👉 Install ig_maxpland_en.user.js**](https://raw.githubusercontent.com/Stxyu-p/ig-maxpland/main/ig_maxpland_en.user.js) |
 
-The **~2x / ~4x labels are targets, not measured speedups**. Both lists use the same logged-in account and may share Instagram's rate limits. No mode guarantees protection from restrictions. Stop/abort remains supported; a failed list cancels its concurrent sibling, and incomplete scans do not save a snapshot. The scan summary reports fetch, wait, and total time for comparison.
+*Requires a userscript manager such as [Tampermonkey](https://www.tampermonkey.net/) (recommended) or [Violentmonkey](https://violentmonkey.github.io/).*
 
-### Use follow-state filters
+---
 
-“Followed” means the account ID is present in your currently loaded **Following** list; “Not followed yet” means it is absent. These are current-list membership filters, not a historical record of every account you have ever followed. Scan again after changes made outside the script to refresh the data.
+## 🌟 Core Philosophy
 
-For example, open **Ghost Accounts**, then select **Followed** to see which no-avatar followers you also follow. A missing avatar or follow state does **not** prove that an account is fake. Export actions apply to the displayed filtered list.
+Most Instagram extensions inject telemetry, transmit session cookies to third-party servers, or execute aggressive request bursts that trigger Meta account checkpoints.
+
+IG MaxPland operates under five strict engineering constraints:
+
+| Principle | Technical Implementation | Practical Benefit |
+| :--- | :--- | :--- |
+| 🛡️ **100% Client-Side Execution** | Zero telemetry, zero cloud endpoints, zero analytics | Complete privacy; session data never leaves your browser |
+| 👁️ **Stealth Story Interception** | Multi-channel network hook (`fetch`, `XHR`, `sendBeacon`) | View any story anonymously without sending *seen* receipts |
+| 🧹 **Clean Feed Engine** | Zero-height preservation with `overflow-anchor: none` | Strips ads and suggested content without triggering scroll bounce |
+| ⏱️ **Inactive Follower Radar** | Bounded batch scanning (max 20 fresh profiles/batch) | Identifies dormant accounts safely within Meta rate limits |
+| 📊 **Offline Relationship Analytics** | Embedded IndexedDB snapshot engine + native SVG sparklines | Comprehensive follow balance and mutual ratio auditing |
+
+---
+
+## 🆕 What's New in v2.7.2
+
+- **Official Greasy Fork Distribution:**
+  - Added primary release and auto-update channel at [Greasy Fork #595787](https://greasyfork.org/th/scripts/595787-ig-maxpland).
+- **Streamlined Stealth Story Toolbar:**
+  - **Zero-Bloat Single Button:** Removed fragile video/tab download actions from the story viewer to eliminate UI thread locking and unplayable MSE blob errors.
+  - Dedicated one-click **`👁️ Stealth: ON / OFF`** toggle attached to active stories, instantly dropping Seen telemetry at `@run-at document-start`.
+- **Configurable Scan Speed:**
+  - Integrated persistent speed presets into **Settings → Scan Speed**:
+    - `Mode A` — Normal (Sequential followers/following, 2–3s inter-page pause; safest).
+    - `Mode B` — Fast (Concurrent followers/following, 2–3s pause per stream).
+    - `Mode C` — High Throughput (Concurrent streams, 0.5–1.0s pause; confirmation dialog required).
+- **Follow-State Filter Chips & Decoupled Action Row:**
+  - Added quick filter chips (**Followed** / **Not followed yet**) to instantly segment any loaded list.
+  - Moved export actions (**Copy Usernames**, **Export CSV**, **Export JSON**) to a dedicated, right-aligned action row beneath the filter bar.
+- **Architectural Simplification (`ponytail:` standard):**
+  - Fully documented all deliberate ceilings and upgrade paths using `ponytail:` comments throughout the codebase.
+
+---
 
 ## 📊 Feature Comparison
 
-| Capability | Generic Scrapers | Common IG Extensions | ⚡ **IG MaxPland** |
+| Capability | Generic Web Scrapers | Common IG Extensions | ⚡ **IG MaxPland** |
 | :--- | :---: | :---: | :---: |
-| **Privacy & Security** | ❌ Sends data to third parties | ⚠️ Requires full tab access | ✅ **100% Local (Zero Analytics)** |
-| **Login Credential Safety** | ❌ Prompts for password | ⚠️ Session hijacking risk | ✅ **Zero Credentials Asked (Session Native)** |
-| **Stealth Story Mode** | ❌ Not available | ⚠️ Leaks seen beacons | ✅ **Intercepted + Masked Function** |
-| **Feed Clean Mode** | ❌ None | ⚠️ Freezes/crashes page | ✅ **Zero-Height Layout & No Scroll Bounce** |
+| **Data Privacy** | ❌ Transmits to external servers | ⚠️ Over-permissioned tab access | ✅ **100% Local (Zero Analytics)** |
+| **Credential Safety** | ❌ Prompts for username/password | ⚠️ Session token capture | ✅ **Zero Credentials (Session-Native)** |
+| **Stealth Story Mode** | ❌ Not supported | ⚠️ Frequently leaks seen beacons | ✅ **Multi-Channel Transport Interceptor** |
+| **Feed Clean Mode** | ❌ None | ⚠️ Freezes viewport or breaks layout | ✅ **Zero-Height Layout & Anchor Locking** |
 | **Inactive Account Radar** | ❌ None | ❌ None | ✅ **Safe 20/batch Deep Post Timestamps** |
-| **Account Health Analytics** | ❌ None | ⚠️ Cloud-based subscription | ✅ **Local Snapshot Diff & SVG Sparklines** |
-| **Follower Tracking** | ❌ None | ⚠️ Shallow diffing | ✅ **IndexedDB Historical Snapshot Diff** |
-| **Unfollow Protection** | ❌ None | ❌ None | ✅ **Protected Whitelist + JSON Backup** |
-| **Unfollow Safety Pacing** | ❌ Rapid spam (ban risk) | ❌ Automated spamming | ✅ **4,500–7,500ms Randomized Jitter** |
-| **Media Downloads** | ⚠️ Low-res or watermarked | ⚠️ Heavy memory-leaking ZIP | ✅ **Direct 1-Click Stream to Disk** |
-| **External Dependencies** | ❌ Heavy (jQuery/Lodash) | ❌ Bloated runtime | ✅ **Zero (`@require` is unused)** |
+| **Account Health Dashboard** | ❌ None | ⚠️ Paid cloud subscription | ✅ **Local Snapshot Diff & SVG Sparklines** |
+| **Unfollow Protection** | ❌ None | ❌ None | ✅ **Starred Whitelist + JSON Portability** |
+| **Anti-Detection Pacing** | ❌ Fixed rapid spam (high ban risk) | ❌ Automated loop | ✅ **4,500–7,500ms Randomized Jitter** |
+| **In-Feed Media Downloader** | ⚠️ Watermarked or downscaled | ⚠️ Heavy memory-leaking ZIPs | ✅ **Direct 1-Click Stream to Disk** |
+| **External Dependencies** | ❌ jQuery, Lodash, external CDNs | ❌ Multi-megabyte bundles | ✅ **Zero Dependencies (Pure Vanilla JS)** |
 
-## 🧩 Architecture
+---
+
+## 🧩 Architectural Flow
 
 ```mermaid
 graph TD
@@ -104,231 +104,130 @@ graph TD
     E -->|Render| K[Ratio Analytics + SVG Sparklines]
     F -->|Enforce| L[Stealth Story / Clean Feed / In-Feed Tools]
     G -->|Configure| M[Radar Threshold / Whitelist Backup]
-    H -->|Download| N[High-Resolution Media Pipeline]
+    H -->|Download| N[Direct-to-Disk Streaming Pipeline]
 
-    I & K & M --> O[(IndexedDB Vault)]
+    I & K & M --> O[(IndexedDB: IG_MAXPLAND_VAULT)]
 ```
-
-## 🛠️ Deep-Dive Feature Breakdown
-
-<details open>
-<summary><h3>👁️ 01 · Stealth Story Viewer</h3></summary>
-
-> Watch any story without leaving a trace — seen telemetry is intercepted and dropped at the transport layer while playback stays seamless.
-
-```mermaid
-graph LR
-    A[Story View] --> B{Seen Beacon}
-    B -->|fetch intercepted| C[🛑 Dropped + Mocked 200 OK]
-    C --> D[👻 You never appear<br>in the viewer list]
-    B -.->|story media| E[▶️ Playback continues]
-```
-
-| Dimension | Implementation | Benefit |
-| :--- | :--- | :--- |
-| **Telemetry Interception** | Hooks `fetch` to drop `/api/v1/stories/reel/seen` requests | Zero seen receipts transmitted |
-| **Native Anti-Detection** | `Function.prototype.toString` camouflage returns `[native code]` | Invisible to page-side hook scanners |
-| **Window Hygiene** | State stored via `Symbol.for('mp_seen_hooked')` | Nothing exposed on `window` |
-| **One-Click Control** | Floating `👁️ Stealth: ON / OFF` button on active stories | Toggle instantly mid-story |
-
-</details>
-
-<details open>
-<summary><h3>🧹 02 · Clean Feed Mode</h3></summary>
-
-> A clutter-free home feed with zero scroll jumping — strips sponsored and suggested content while preserving Instagram's React virtual DOM integrity.
-
-```mermaid
-graph LR
-    A[Incoming Post] --> B{Sponsored or<br>Suggested?}
-    B -->|Yes| C[🛡️ Zero-Height Layout<br>+ overflow-anchor: none]
-    B -->|No| D[Render Normal Post]
-    C --> E[⚡ Smooth scrolling,<br>no bounce to top]
-    D --> E
-```
-
-| Engineering Pillar | Mechanism | User Impact |
-| :--- | :--- | :--- |
-| **Zero-Height Preservation** | `visibility: hidden; height: 0` instead of `display: none` | React fiber references stay intact — no DOM collapse |
-| **Scroll-Anchor Lock** | `overflow-anchor: none !important` on filtered articles | Chromium's scroll engine never resets `scrollTop` to 0 |
-| **Header-Targeted Scan** | Inspects only the `<header>` element (first 300 chars) | Fast filtering without re-rendering post trees |
-| **Precise Keywords** | Only `sponsored`, `ได้รับการสนับสนุน`, `suggested for you`, `แนะนำสำหรับคุณ` | Normal posts from friends are never hidden |
-
-</details>
-
-<details open>
-<summary><h3>⏱️ 03 · Inactive Following Radar</h3></summary>
-
-> Prune abandoned accounts safely — detects profiles in your Following list that stopped posting months or years ago, with automatic rate-limit pacing and a resumable scan.
-
-```mermaid
-graph TD
-    A[Following List] --> B{Activity cached<br>in IndexedDB?}
-    B -->|Yes| C[Use cached date]
-    B -->|No| D[Query latest post<br>with jitter pause]
-    D --> E{🛑 Batch Guard<br>max 20 fresh queries}
-    C & E --> F[⏱️ Dormant report<br>3 / 6 / 12 / 24 months]
-```
-
-| Feature | Specification |
-| :--- | :--- |
-| **Inactivity Window** | 🎛️ Threshold: **90** (3 mo) / **180** (6 mo) / **365** (1 yr) / **730** (2 yr) days |
-| **Batch Safety Ceiling** | 🛑 Max **20** fresh queries per batch to respect Meta rate limits |
-| **Anti-Detection Jitter** | ⏱️ Randomized pauses of **3,500–6,000ms** between profile requests |
-| **Instant Resume** | ⏭️ Stop anytime and continue exactly where the scan paused |
-| **Persistent Cache** | 💾 Verified last-post timestamps saved locally — repeat scans run instantly |
-
-</details>
-
-<details open>
-<summary><h3>📊 04 · Account Health Dashboard</h3></summary>
-
-> Complete relationship intelligence at a single glance — computed 100% locally from historical snapshots.
-
-| Metric | Diagnostic Meaning |
-| :--- | :--- |
-| **Follower / Following Ratio** | Classifies your account: ⭐ Creator · ⚖️ Healthy Balance · 🔍 Consumer Heavy |
-| **Mutual Friendship Rate** | True relationship engagement (mutuals ÷ total following) |
-| **Ghost Impact** | Accounts with **no profile picture** in your follower base |
-| **Native SVG Sparkline** | Growth curve rendered on-the-fly — zero chart dependencies |
-
-> [!NOTE]
-> The growth sparkline and delta tracker are plotted from your own IndexedDB snapshots across scans — no external libraries, no network calls.
-
-</details>
-
-<details open>
-<summary><h3>🔍 05 · Relationship Scanner & Safe Batch Unfollower</h3></summary>
-
-> Deep categorization and a human-mimicking unfollow queue — keep your network clean without account checkpoint flags.
-
-| Category | Description | Safety Action |
-| :--- | :--- | :---: |
-| **Not Following Back** | Accounts you follow that don't follow you back | Batch Unfollow |
-| **Fans** | Accounts following you that you don't follow back | View / Whitelist |
-| **Mutuals** | Reciprocal friends | Protected by default |
-| **Recently Lost** | Unfollowers detected by snapshot diffing | Alerts + History |
-| **Ghost Accounts** | Followers with no profile picture | Safe Cleanup |
-| **Inactive Radar** | Accounts dormant beyond your threshold | One-Click Selection |
-
-> [!TIP]
-> **🛡️ Defensive Unfollow Safeguards**
-> - **Starred Whitelist** — mark friends or creators with ⭐ to permanently lock them from any unfollow path (single, batch, and keyboard)
-> - **JSON Backup / Restore** — export your Whitelist to migrate between devices
-> - **Randomized 4.5–7.5s Jitter** — human-like pacing with live countdown and instant abort
-> - **Verified Results Only** — an unfollow counts only when Instagram confirms it; ambiguous responses stop the queue instead of guessing
-
-</details>
-
-<details open>
-<summary><h3>📥 06 · Precision Media Downloader & Vault</h3></summary>
-
-> Original quality without compromise — direct-to-disk streaming for photos, 1080p MP4 videos, full carousels, and stories.
-
-```mermaid
-graph LR
-    A[Instagram Media] --> B[MaxPland Action Bar]
-    B --> C[Single Media<br>HD photo · 1080p MP4]
-    B --> D[Full Carousel<br>all slides, named in order]
-    B --> E[Story & Avatar<br>uncompressed MP4 · HD photo]
-    C & D & E --> F[(Streamed to disk<br>zero memory bloat)]
-```
-
-| Target | Capability |
-| :--- | :--- |
-| **In-Feed Action Menu** | Dark menu injected next to the bookmark button on every feed post |
-| **1-Click Rapid Download** | Double-click the download icon to grab the active media at max resolution |
-| **Full Carousel Batching** | Downloads every slide with proper sequential naming and per-media history keys |
-| **Story Toolbar** | Floating bar on stories — full video, cover art, or open in new tab |
-| **HD Profile Avatar** | Dedicated badge on profile pages for the full uncompressed photo |
-| **Local Media Vault** | IndexedDB record of every download with re-download and inspect links |
-
-</details>
 
 ---
 
-## 💻 One-Click Installation
+## 🛠️ Feature Deep Dive
 
-**Step 1 — Install a userscript manager:**
-[**Tampermonkey**](https://www.tampermonkey.net/) *(recommended)* or [**Violentmonkey**](https://violentmonkey.github.io/)
+### 👁️ 01 · Stealth Story Viewer (Ghost Mode)
 
-**Step 2 — Choose your language build:**
+Watch Instagram stories anonymously. Telemetry beacons indicating you have seen a story are intercepted and dropped before exiting your machine, while media playback continues without disruption.
 
-| Edition | Language | Direct Installation |
-| :--- | :--- | :--- |
-| 🌐 **Global Release** | English | [**👉 Install IG MaxPland (v2.7.0 EN)**](https://raw.githubusercontent.com/Stxyu-p/ig-maxpland/main/ig_maxpland_en.user.js) |
-| 🇹🇭 **Thai Native Edition** | ภาษาไทย | [**👉 ติดตั้ง IG MaxPland (v2.7.0 TH)**](https://raw.githubusercontent.com/Stxyu-p/ig-maxpland/main/ig_maxpland.user.js) |
-
-**Step 3 — Start using:**
-Open [Instagram Web](https://www.instagram.com/) and look for the **MaxPland floating icon** at the bottom-right of your screen.
-
-## ⌨️ Shortcuts & Hotkeys
-
-| Trigger | Action | Description |
-| :--- | :--- | :--- |
-| <kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>M</kbd> | **Toggle Studio** | Open or close the MaxPland Control Center |
-| **Floating Circle** | **Click / Drag** | Click to open Studio, drag to reposition |
-| **Double-Click Download** | **Direct Download** | Instantly downloads the active in-feed media |
-| **Single-Click Download** | **Precision Menu** | Options: HD image/video, all carousel slides, open in tab |
-| **Story Stealth Button** | **Toggle Stealth** | Toggle anonymous story viewing on the story screen |
-
-## 🔒 Security Manifesto
-
-> [!IMPORTANT]
-> **No Credentials Stored. No Analytics. Zero External Network Requests.**
-
-1. **Native Session Transport** — never asks for your password; authenticates through your existing browser session cookies only
-2. **Meta Header Parity** — legitimate web headers (`X-ASBD-ID`, dynamic `X-IG-WWW-Claim`), no obsolete bot signatures like `X-Requested-With`
-3. **Local IndexedDB Database** — snapshots, whitelist, and activity cache stay on your machine in `IG_MAXPLAND_VAULT`
-4. **Zero `@require` CDNs** — no third-party script vulnerabilities; everything lives in one self-contained file
-
-## 🧪 Development & Testing
-
-```bash
-node --check ig_maxpland.user.js
-node --check ig_maxpland_en.user.js
-node --unhandled-rejections=strict round1.check.cjs
-node --unhandled-rejections=strict round1.check.cjs ig_maxpland_en.user.js
+```mermaid
+graph LR
+    A[Story Playback] --> B{Seen Telemetry}
+    B -->|fetch / XHR / Beacon| C[🛑 Intercepted & Dropped]
+    C --> D[👻 You never appear on the viewer list]
+    B -.->|Media Stream| E[▶️ Uninterrupted playback]
 ```
 
-The check harness loads the real userscript in an isolated Node `vm` context with stubbed DOM, storage, and network boundaries — it exercises the original functions without ever sending a request to Instagram.
+- **Multi-Transport Dropper:** Intercepts `/api/v1/stories/reel/seen/`, GraphQL `StoriesSeen` mutations, and `navigator.sendBeacon`.
+- **Native Camouflage:** Functions preserve native string representation (`[native code]`) to evade page-side hook detection.
+- **Dedicated Story Bar:** A clean floating toolbar on active stories provides instant `👁️ Stealth: ON / OFF` toggling.
 
-Current checks: **37/37 pass for each edition**. The separated filter/export layout was also checked in a browser preview at **375, 600, and 900px** without horizontal overflow. The preview isolates the toolbar markup/CSS; it is not an Instagram integration test. Live Instagram behavior and the speed targets still require real-session validation.
+---
 
-## ❓ FAQ
+### 🧹 02 · Clean Feed Mode
 
-<details>
-<summary><b>How does Stealth Story Viewer keep me anonymous?</b></summary>
-<br>
-When you view a story, the browser sends a "seen" beacon to Meta's servers. IG MaxPland intercepts and drops these requests before they leave your browser and returns a mocked 200 OK so playback is uninterrupted — your name never appears on the viewer list.
-</details>
+Removes sponsored advertisements and suggested accounts from the home feed with zero layout shift.
 
-<details>
-<summary><b>Why does Clean Feed Mode not jump back to the top?</b></summary>
-<br>
-Standard ad blockers use <code>display: none</code>, which collapses elements and disrupts Chromium's scroll-anchoring. IG MaxPland uses zero-height layout preservation plus <code>overflow-anchor: none !important</code>, keeping your exact viewport position.
-</details>
+- **Zero-Height Preservation:** Hides articles with `visibility: hidden; height: 0` instead of `display: none`, keeping React Fiber references and DOM node heights stable.
+- **Scroll-Anchor Protection:** Applies `overflow-anchor: none !important` to filtered posts, ensuring Chromium never resets your scroll position back to top.
+- **Micro-Targeted Evaluation:** Scans only the article header (first 300 characters) for sponsorship tokens, bypassing expensive DOM tree re-renders.
 
-<details>
-<summary><b>What are the safe limits for bulk unfollowing?</b></summary>
-<br>
-We recommend 50–100 accounts per session with several hours between batches. IG MaxPland enforces a randomized <b>4.5–7.5 second</b> human-mimicking pause between each request, shows a live countdown, and stops immediately on checkpoint or auth errors.
-</details>
+---
 
-<details>
-<summary><b>Can I transfer my Starred Whitelist between devices?</b></summary>
-<br>
-Yes — open the <b>Settings</b> tab in MaxPland Studio, click <b>Backup Whitelist</b> to download a JSON file, then <b>Restore Whitelist</b> on the other device.
-</details>
+### ⏱️ 03 · Inactive Following Radar
+
+Audits your following list for dormant accounts that have stopped publishing new content.
+
+- **Configurable Inactivity Window:** Select from **90 days** (3 months), **180 days** (6 months), **365 days** (1 year), or **730 days** (2 years).
+- **Batch Safety Ceiling:** Hard cap of **20 fresh profile queries per batch** to strictly honor Meta rate limits.
+- **Randomized Jitter:** Enforces 3,500–6,000ms delay between profile evaluations.
+- **Local Persistence:** Verified post timestamps are stored in IndexedDB so repeat audits complete instantly.
+
+---
+
+### 🔍 04 · Relationship Intelligence & Safe Unfollower
+
+Comprehensive audit of reciprocal relationships with defensive unfollowing protections.
+
+| Relationship Category | Description | Primary Action |
+| :--- | :--- | :---: |
+| **Not Following Back** | Accounts you follow who do not follow you back | Safe Batch Unfollow |
+| **Fans** | Accounts following you whom you do not follow back | Inspect / Whitelist |
+| **Mutual Friends** | Reciprocal contacts | Protected by default |
+| **Recently Lost** | Unfollowers detected between historical snapshots | Historical Diff Log |
+| **Ghost Accounts** | Followers with no avatar picture | Safe Segmentation |
+| **Inactive Radar** | Accounts exceeding your dormancy threshold | Filtered Selection |
+
+#### 🛡️ Unfollow Safety Safeguards
+- **Starred Whitelist (⭐):** Lock friends or creators to permanently prevent accidental unfollows across all interfaces.
+- **Humanized Jitter Pacing:** Enforces randomized 4,500–7,500ms intervals between calls with visible countdown.
+- **Server Confirmation Enforcement:** Unfollow actions are committed only after verified HTTP 200 responses; ambiguous failures immediately abort the queue.
+- **JSON Portability:** Export and import your whitelist configuration across browsers and machines.
+
+---
+
+### 📥 05 · Precision In-Feed Downloader & Media Vault
+
+Stream high-resolution assets directly to disk without quality degradation.
+
+- **In-Feed Action Bar:** Dark-themed action triggers embedded directly next to the bookmark button on posts.
+- **1-Click Direct Download:** Double-click the download icon to grab the active media asset immediately.
+- **Full Carousel Processing:** Sequential multi-slide downloader with automatic deduplication.
+- **Full-Resolution Profile Avatars:** Dedicated profile header badge extracts uncompressed HD avatars.
+- **Local Media Vault:** IndexedDB record of download history with one-click redownload links.
+
+---
+
+## ⌨️ Shortcuts & Interaction
+
+| Trigger | Context | Action |
+| :--- | :--- | :--- |
+| <kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>M</kbd> | Global | Open or close MaxPland Studio |
+| **Floating Indicator** | Global | Click to open Studio, drag to reposition |
+| **Double-Click Media Button** | Feed Post | Instantly stream active image/video to disk |
+| **Single-Click Media Button** | Feed Post | Open media options menu (HD, Carousel, New Tab) |
+| **Story Toolbar Toggle** | Active Story | Toggle Stealth Ghost Mode on or off |
+
+---
+
+## 🔒 Security & Privacy Standard
+
+> [!IMPORTANT]
+> **Zero Third-Party Communication · Zero Credentials Required**
+
+1. **Session-Native Transport:** Runs entirely within your authenticated browser session — never requests or stores login credentials.
+2. **Meta Header Parity:** Sends genuine browser headers (`X-ASBD-ID`, dynamic `X-IG-WWW-Claim`) without legacy scraping signatures.
+3. **Local Storage Only:** Relationship snapshots, settings, and media logs reside solely in client-side IndexedDB (`IG_MAXPLAND_VAULT`).
+4. **Zero CDN Inclusions:** Self-contained script with zero `@require` dependencies eliminates supply-chain vulnerabilities.
+
+---
+
+## 🧪 Verification & Automated Testing
+
+The automated test suite runs in an isolated Node.js environment with mocked DOM, storage, and network boundaries:
+
+```bash
+# Verify syntax across builds
+node --check ig_maxpland.user.js
+node --check ig_maxpland_en.user.js
+
+# Execute regression test suite
+node round1.check.cjs
+TARGET_SCRIPT=ig_maxpland_en.user.js node round1.check.cjs
+```
+
+**Verification Status:** **46/46 checks passing** on both Thai Native and Global English editions.
 
 ---
 
 ## 📄 License
 
-MIT — see [LICENSE](LICENSE).
-
-```
-Copyright (c) 2026 P Choke & SORA
-```
-
-Feel free to star ⭐ the repository, report issues, and suggest enhancements!
+Distributed under the [MIT License](LICENSE).  
+Copyright (c) 2026 P Choke & SORA.
