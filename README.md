@@ -1,6 +1,6 @@
 <div align="center">
 
-# ⚡ IG MaxPland <sub>v2.7.0</sub>
+# ⚡ IG MaxPland <sub>v2.7.2</sub>
 
 **Relationship Intelligence Suite & Precision Media Downloader for Instagram Web**
 
