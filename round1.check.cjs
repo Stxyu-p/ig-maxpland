@@ -440,6 +440,7 @@ function analyzeHarness(count) {
     const h = harness();
     h.MaxPlandVault.getLatestSnapshot = async () => null;
     h.MaxPlandVault.getWhitelist = async () => new Map();
+    h.MaxPlandVault.saveSnapshot = async () => {};
     const followers = Array.from({ length: count }, (_, i) => ({ id: String(i + 2), username: 'f' + i }));
     h.STATE.following = followers;
     h.IgBridge.resolveCurrentUser = async () => ({ id: '1', username: 'me' });
@@ -457,6 +458,40 @@ test('Bot-ghost heuristic is a subset of the no-avatar set', () => {
     const ghostSource = source;
     assert.match(ghostSource, /ghostFollowers: followers\.filter\(u => hasNoAvatar\(u\)\)/);
     assert.doesNotMatch(ghostSource, /hasNoAvatar\(u\) \|\| isSuspiciousBot\(u\)/);
+});
+test('Avatar detection handles real profile_pic_url without throwing and filters default avatars', async () => {
+    const h = analyzeHarness(4);
+    const userWithAvatar = {
+        id: '201',
+        username: 'real_user',
+        profile_pic_url: 'https://instagram.fcbr1-1.fna.fbcdn.net/v/t51.2885-19/12345678_real.jpg'
+    };
+    const userWithDefaultAvatar1 = {
+        id: '202',
+        username: 'ghost_user_1',
+        profile_pic_url: 'https://instagram.fcbr1-1.fna.fbcdn.net/v/t51.2885-19/44884218_345707102882519_2446069589734326272_n.jpg'
+    };
+    const userWithDefaultAvatar2 = {
+        id: '203',
+        username: 'ghost_user_2',
+        profile_pic_url: 'https://instagram.fcbr1-1.fna.fbcdn.net/v/t51.2885-19/464760996_1254146839119862_3605321457742435801_n.jpg'
+    };
+    const userWithAnonFlag = {
+        id: '204',
+        username: 'anon_user',
+        profile_pic_url: 'https://instagram.fcbr1-1.fna.fbcdn.net/v/t51.2885-19/99999999_custom.jpg',
+        has_anonymous_profile_picture: true
+    };
+    const followers = [userWithAvatar, userWithDefaultAvatar1, userWithDefaultAvatar2, userWithAnonFlag];
+    h.STATE.following = [userWithAvatar];
+    h.IgBridge.fetchAllRelationships = async endpoint => {
+        const list = endpoint === 'followers' ? [...followers] : [userWithAvatar];
+        list.completed = true;
+        return list;
+    };
+    await h.runRelationshipScan();
+    assert.equal(h.STATE.ghostFollowers.length, 3, 'Default avatars and anonymous avatar are detected as ghosts');
+    assert.equal(h.STATE.ghostFollowers.some(u => u.id === '201'), false, 'Real user with avatar is not a ghost');
 });
 test('Ghost copy stops promising bot detection', async () => {
     const h = analyzeHarness(5);

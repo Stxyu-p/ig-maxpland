@@ -13,6 +13,10 @@
         FOLLOWERS_PAGE_SAFETY_LIMIT: 250,
         UNFOLLOW_DELAY_MIN: 4500,
         UNFOLLOW_DELAY_MAX: 7500,
+        DEFAULT_AVATAR_PATTERNS: [
+            '44884218_345707102882519_2446069589734326272_n',
+            '464760996_1254146839119862_3605321457742435801_n'
+        ],
     };
 
     const ICONS = {
@@ -2446,9 +2450,16 @@
     }
 
     function hasNoAvatar(user) {
-        if (!user.profile_pic_url) return true;
+        if (typeof IgRelationship !== 'undefined' && typeof IgRelationship.hasNoAvatar === 'function') {
+            return IgRelationship.hasNoAvatar(user);
+        }
+        if (!user || !user.profile_pic_url) return true;
         if (user.has_anonymous_profile_picture === true) return true;
-        return APP_CONFIG.DEFAULT_AVATAR_PATTERNS.some(p => user.profile_pic_url.includes(p));
+        const patterns = Array.isArray(APP_CONFIG?.DEFAULT_AVATAR_PATTERNS) ? APP_CONFIG.DEFAULT_AVATAR_PATTERNS : [
+            '44884218_345707102882519_2446069589734326272_n',
+            '464760996_1254146839119862_3605321457742435801_n'
+        ];
+        return patterns.some(p => typeof user.profile_pic_url === 'string' && user.profile_pic_url.includes(p));
     }
 
     function extractShortcodesFromText(text) {
