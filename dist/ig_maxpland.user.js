@@ -25,7 +25,7 @@
     'use strict';
 
     /* ==========================================================================
-       MODULAR CORE ARCHITECTURE (v3.0.0 Clean Architecture)
+       MODULAR CORE ARCHITECTURE (v3.0.0 Clean Architecture - Thai Native (TH))
        ========================================================================== */
 
     // ─── Module: src/utils/Utils.js ──────────────────────────────────────
@@ -4458,7 +4458,7 @@ if (typeof module !== 'undefined' && module.exports) {
 
 
     /* ==========================================================================
-       APPLICATION RUNTIME & UI GLUE
+       APPLICATION RUNTIME & UI GLUE (Thai Native (TH))
        ========================================================================== */
 
 

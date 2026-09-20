@@ -6,9 +6,9 @@
   "scripts": {
     "build": "node build.js",
     "dev": "node build.js --watch",
-    "test": "node test/phase1.check.cjs && node test/phase2.check.cjs && node test/phase3.check.cjs && node test/phase4.check.cjs && node test/phase5.check.cjs && node round1.check.cjs dist/ig_maxpland.user.js",
+    "test": "node test/phase1.check.cjs && node test/phase2.check.cjs && node test/phase3.check.cjs && node test/phase4.check.cjs && node test/phase5.check.cjs && node round1.check.cjs dist/ig_maxpland.user.js && node round1.check.cjs dist/ig_maxpland_en.user.js",
     "test:modules": "node test/phase1.check.cjs && node test/phase2.check.cjs && node test/phase3.check.cjs && node test/phase4.check.cjs && node test/phase5.check.cjs",
-    "test:bundle": "node round1.check.cjs dist/ig_maxpland.user.js"
+    "test:bundle": "node round1.check.cjs dist/ig_maxpland.user.js && node round1.check.cjs dist/ig_maxpland_en.user.js"
   },
   "keywords": [
     "instagram",
