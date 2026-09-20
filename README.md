@@ -1,18 +1,19 @@
 <div align="center">
 
-# ⚡ IG MaxPland <sub>v2.7.2</sub>
+# ⚡ IG MaxPland <sub>v3.0.0</sub>
 
 **Enterprise-Grade Relationship Intelligence & Precision Media Downloader for Instagram Web**
 
-*High Speed · Zero-Footprint Privacy · Stealth Anti-Detection*  
-*Pure Vanilla JavaScript · Zero Dependencies · Single Userscript Architecture*
+*Clean Architecture · High Speed · Zero-Footprint Privacy · Stealth Anti-Detection*  
+*Pure Vanilla JavaScript · Zero Dependencies · Modular Source & Automated Build Pipeline*
 
-[![Greasy Fork](https://img.shields.io/badge/Greasy%20Fork-Install%20v2.7.2-red?style=for-the-badge&logo=greasyfork&logoColor=white)](https://greasyfork.org/th/scripts/595787-ig-maxpland)
+[![Greasy Fork](https://img.shields.io/badge/Greasy%20Fork-Install%20v3.0.0-red?style=for-the-badge&logo=greasyfork&logoColor=white)](https://greasyfork.org/th/scripts/595787-ig-maxpland)
 [![Install Raw](https://img.shields.io/badge/Install-Userscript%20Raw-0284c7?style=for-the-badge&logo=tampermonkey&logoColor=white)](#-one-click-installation)
-[![Release](https://img.shields.io/badge/Release-v2.7.2-10b981?style=for-the-badge)](https://github.com/Stxyu-p/ig-maxpland/releases)
+[![Release](https://img.shields.io/badge/Release-v3.0.0-10b981?style=for-the-badge)](https://github.com/Stxyu-p/ig-maxpland/releases)
 [![License](https://img.shields.io/badge/License-MIT-f59e0b?style=for-the-badge)](LICENSE)
 
 ![Dependencies](https://img.shields.io/badge/Dependencies-Zero-success?style=flat-square)
+![Architecture](https://img.shields.io/badge/Architecture-Clean%20Modular%20v3.0-blueviolet?style=flat-square)
 ![Engine](https://img.shields.io/badge/Engine-Vanilla%20JS-cyan?style=flat-square)
 ![Storage](https://img.shields.io/badge/Storage-IndexedDB%20Vault-blue?style=flat-square)
 ![Anti-Detection](https://img.shields.io/badge/Anti--Detection-Native%20Masking%20%2B%20Jitter-purple?style=flat-square)
@@ -27,7 +28,7 @@
 | Channel | Edition | Source | Link |
 | :--- | :--- | :--- | :--- |
 | 🦊 **Greasy Fork** | Official Distribution | Auto-updating | [**👉 Install from Greasy Fork**](https://greasyfork.org/th/scripts/595787-ig-maxpland) |
-| 🇹🇭 **Userscript (TH)** | Thai Native Edition | Direct GitHub Raw | [**👉 Install ig_maxpland.user.js**](https://raw.githubusercontent.com/Stxyu-p/ig-maxpland/main/ig_maxpland.user.js) |
+| 🇹🇭 **Userscript (TH)** | Thai Native Edition (v3.0.0) | Direct GitHub Raw | [**👉 Install ig_maxpland.user.js**](https://raw.githubusercontent.com/Stxyu-p/ig-maxpland/main/ig_maxpland.user.js) |
 | 🌐 **Userscript (EN)** | Global English Edition | Direct GitHub Raw | [**👉 Install ig_maxpland_en.user.js**](https://raw.githubusercontent.com/Stxyu-p/ig-maxpland/main/ig_maxpland_en.user.js) |
 
 *Requires a userscript manager such as [Tampermonkey](https://www.tampermonkey.net/) (recommended) or [Violentmonkey](https://violentmonkey.github.io/).*
@@ -50,23 +51,25 @@ IG MaxPland operates under five strict engineering constraints:
 
 ---
 
-## 🆕 What's New in v2.7.2
+## 🆕 What's New in v3.0.0 (Clean Architecture)
 
-- **Official Greasy Fork Distribution:**
-  - Added primary release and auto-update channel at [Greasy Fork #595787](https://greasyfork.org/th/scripts/595787-ig-maxpland).
-- **Streamlined Stealth Story Toolbar:**
-  - **Zero-Bloat Single Button:** Removed fragile video/tab download actions from the story viewer to eliminate UI thread locking and unplayable MSE blob errors.
-  - Dedicated one-click **`👁️ Stealth: ON / OFF`** toggle attached to active stories, instantly dropping Seen telemetry at `@run-at document-start`.
-- **Configurable Scan Speed:**
-  - Integrated persistent speed presets into **Settings → Scan Speed**:
-    - `Mode A` — Normal (Sequential followers/following, 2–3s inter-page pause; safest).
-    - `Mode B` — Fast (Concurrent followers/following, 2–3s pause per stream).
-    - `Mode C` — High Throughput (Concurrent streams, 0.5–1.0s pause; confirmation dialog required).
-- **Follow-State Filter Chips & Decoupled Action Row:**
-  - Added quick filter chips (**Followed** / **Not followed yet**) to instantly segment any loaded list.
-  - Moved export actions (**Copy Usernames**, **Export CSV**, **Export JSON**) to a dedicated, right-aligned action row beneath the filter bar.
-- **Architectural Simplification (`ponytail:` standard):**
-  - Fully documented all deliberate ceilings and upgrade paths using `ponytail:` comments throughout the codebase.
+- **🏗️ Full Clean Architecture Modularization:**
+  - Transitioned the codebase into 18 decoupled, single-responsibility modules across `src/modules/`, `src/core/`, `src/features/`, `src/ui/`, and `src/utils/`.
+  - Leaf authentication (`IgAuth`), isolated transport (`IgTransport`), diffing engine (`IgRelationship`), media processing (`IgMedia`), profile fetching (`IgProfile`), and safe unfollowing (`IgUnfollow`).
+- **📦 Zero-Dependency Build Pipeline (`build.js`):**
+  - Deterministic module concatenation in topological dependency order.
+  - Generates distribution bundle at `dist/ig_maxpland.user.js` and synchronizes root `ig_maxpland.user.js`.
+  - Full developer workflow: `npm run build`, `npm run dev` (with `--watch`), and `npm test`.
+- **🛡️ Enhanced Safety Hardening (P0):**
+  - Account ID validation hoisted outside of retry loops in `IgBridge.request()`, `downloadResolvedMedia()`, and `runInactiveScan()`.
+  - Automatic snapshot migration fallback for pre-v6 historical lost-followers records.
+  - Strengthened cookie refresh hints for CSRF token expiration during unfollow operations.
+  - Network retry mechanism (2× exponential backoff) for media shortcode downloads.
+- **🔒 Reduced Attack Surface:**
+  - Stripped unused `@grant GM_xmlhttpRequest` and `@connect fbcdn.net` permissions from userscript headers.
+- **🧪 100% Automated Test Coverage:**
+  - Modular unit tests (`test/phase1` through `test/phase5`) covering all extracted modules.
+  - Zero-regression certification against the 46-invariant test suite (`round1.check.cjs`).
 
 ---
 
@@ -209,21 +212,67 @@ Stream high-resolution assets directly to disk without quality degradation.
 
 ---
 
-## 🧪 Verification & Automated Testing
+## 🏗️ Clean Architecture & Project Structure
 
-The automated test suite runs in an isolated Node.js environment with mocked DOM, storage, and network boundaries:
-
-```bash
-# Verify syntax across builds
-node --check ig_maxpland.user.js
-node --check ig_maxpland_en.user.js
-
-# Execute regression test suite
-node round1.check.cjs
-TARGET_SCRIPT=ig_maxpland_en.user.js node round1.check.cjs
+```
+ig-maxpland/
+├── src/
+│   ├── core/                  # State management & faceted filter engine
+│   │   ├── StateManager.js
+│   │   └── FilterEngine.js
+│   ├── modules/               # Domain API & Relationship modules
+│   │   ├── IgAuth.js          # Leaf authentication & session handling
+│   │   ├── IgTransport.js     # Rate-limited HTTP transport
+│   │   ├── IgRelationship.js  # Diffing & ghost detection
+│   │   ├── IgMedia.js         # Media resolution & download helpers
+│   │   ├── IgProfile.js       # Profile HD & activity fetching
+│   │   └── IgUnfollow.js      # Defensive unfollowing execution
+│   ├── features/              # User-facing standalone features
+│   │   ├── MediaDownloader.js # In-feed & carousel downloader
+│   │   ├── DOMInjector.js     # Action bars, avatar badges & observers
+│   │   ├── StoryStealth.js    # Multi-channel seen interceptor
+│   │   └── CleanFeed.js       # Non-collapsing feed cleaner
+│   ├── ui/                    # UI engines & event systems
+│   │   ├── EventDelegator.js  # Root event delegation
+│   │   ├── ProgressController.js
+│   │   └── TemplateEngine.js  # Safe XSS template interpolation
+│   ├── utils/                 # Pure utility & DOM selector helpers
+│   │   ├── Utils.js
+│   │   ├── IGSelectors.js
+│   │   └── DOMUtils.js
+│   └── app.js                 # Application runtime & UI glue
+├── dist/
+│   └── ig_maxpland.user.js    # Production bundle (v3.0.0)
+├── test/                      # Unit check suites (Phase 1 to Phase 5)
+├── build.js                   # Zero-dependency build pipeline
+├── round1.check.cjs           # 46-invariant regression test suite
+└── package.json
 ```
 
-**Verification Status:** **46/46 checks passing** on both Thai Native and Global English editions.
+---
+
+## 🧪 Verification & Automated Testing
+
+All tests run in an isolated Node.js test harness without external test runner dependencies:
+
+```bash
+# Run complete test suite (modules + production bundle)
+npm test
+
+# Run modular unit tests only
+npm run test:modules
+
+# Run full 46-invariant regression check on bundle
+npm run test:bundle
+
+# Development mode (watch and rebuild on file change)
+npm run dev
+
+# Production build
+npm run build
+```
+
+**Verification Status:** **100% Pass** across all 5 modular test suites and **46/46 invariant checks passing** on the production bundle.
 
 ---
 
@@ -231,3 +280,4 @@ TARGET_SCRIPT=ig_maxpland_en.user.js node round1.check.cjs
 
 Distributed under the [MIT License](LICENSE).  
 Copyright (c) 2026 P Choke & SORA.
+

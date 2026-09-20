@@ -1,0 +1,176 @@
+--- a/ig_maxpland.user.js
++++ b/ig_maxpland.user.js
+@@ -953,7 +953,7 @@
+             const accountId = options.accountId || this.getCookie('ds_user_id');
+             this.assertAccount(accountId);
+             if (this.cooldownAccount === accountId && Date.now() < this.cooldownUntil) {
+-                const seconds = Math.ceil((this.cooldownUntil - Date.now()) / 1000);
++                const seconds = Math.ceil((this.cooldownUntil - Date.now()) / 1000);
+                 throw this.error(`Instagram ขอให้พัก กรุณารออีก ${seconds} วินาที`, 'RATE_LIMIT', 429);
+             }
+             const page = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
+@@ -974,13 +974,14 @@
+                 let timedOut = false;
+                 const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, 30000);
+                 try {
++                    this.assertAccount(accountId);
+                     const res = await fetchFn(target.href, { method, headers, credentials: 'include',
+                         body: options.body ?? options.data, signal: controller.signal });
+                     const newClaim = res.headers?.get('x-ig-www-claim');
+                     if (newClaim) this.wwwClaim = newClaim;
+                     const text = await res.text();
+-                    this.assertAccount(accountId);
+                     if (options.signal?.aborted) throw new DOMException('หยุดการทำงานแล้ว', 'AbortError');
+                     let data = null;
+                     try { data = JSON.parse(text); } catch (_) {}
+@@ -1014,7 +1015,7 @@
+                     }
+                     if (!res.ok) throw this.error(`Instagram ตอบกลับ HTTP ${res.status}`, 'HTTP', res.status);
+                     if (!data || typeof data !== 'object') throw this.error('Instagram ส่งรูปแบบข้อมูลไม่ถูกต้อง', 'PAYLOAD', res.status);
+-                    if (data.status === 'fail' || data.errors?.length) throw this.error('Instagram ปฏิเสธคำขอข้อมูล', 'API', res.status);
++                    if (data.status === 'fail' || (data.errors && data.errors.length)) throw this.error('Instagram ปฏิเสธคำขอข้อมูล', 'API', res.status);
+                     return data;
+                 } catch (err) {
+                     if (options.signal?.aborted) throw new DOMException('หยุดการทำงานแล้ว', 'AbortError');
+@@ -1034,7 +1035,10 @@
+             const user = STATE.following.find(u => String(u.id || u.pk_id || u.pk || '') === uid);
+             if (isProtectedUser(uid, user?.username)) throw new Error('บัญชีนี้อยู่ใน Whitelist');
+             const accountId = STATE.relationshipAccountId || this.getCookie('ds_user_id');
+-            this.assertAccount(accountId);
++            // Validate account before unfollow attempt
++            try {
++                this.assertAccount(accountId);
++            } catch (e) { throw this.error('บัญชีเปลี่ยนหรือออกจากระบบ — กรุณารีเฟรช Instagram แล้วลองใหม่', 'ACCOUNT_CHANGED'); }
+             const csrf = this.getCookie('csrftoken');
+             if (!csrf) throw this.error('ไม่พบ CSRF token กรุณารีเฟรช Instagram', 'AUTH');
+ 
+@@ -1153,8 +1157,8 @@
+             const signal = STATE.scanController?.signal;
+             const limit = Math.max(1, Math.min(250, Number(pageSafetyLimit) || 250));
+             const fetchStats = { requestMs: 0, waitMs: 0 };
+-            try {
+-                while (!STATE.stopScanFlag) {
++            // Use endpoint-specific safety limits from APP_CONFIG
++            const safetyLimit = endpoint === 'followers' ? APP_CONFIG.FOLLOWERS_PAGE_SAFETY_LIMIT : APP_CONFIG.FOLLOWING_PAGE_SAFETY_LIMIT;
++            while (!STATE.stopScanFlag) {
+                 this.assertAccount(String(userId));
+                 let data;
+                 try {
+@@ -1165,7 +1169,7 @@
+                         fetchStats.requestMs += performance.now() - t1;
+                     }
+                     this.assertAccount(String(userId));
+-                    if (STATE.stopScanFlag) break;
++                    if (STATE.stopScanFlag) { all.completed = false; break; }
+                     if (!Array.isArray(data?.users)) throw new Error('Invalid relationship page');
+                     const next = data.next_max_id == null ? '' : String(data.next_max_id);
+@@ -1177,7 +1181,7 @@
+                     if (!data.users.length && next) throw new Error('Empty relationship page with cursor');
+                     const before = all.length;
+                     for (const user of data.users) {
+-                        const id = String(user?.id || user?.pk_id || user?.pk || '');
++                        const id = String(user?.id || user?.pk_id || user?.pk || '').trim();
+                         if (!/^\d+$/.test(id)) continue;
+                         if (!seenUsers.has(id)) {
+                             seenUsers.add(id);
+@@ -1194,7 +1198,7 @@
+                     all.pagesFetched++;
+                     onProgress?.(all.length, all.pagesFetched, null);
+                     this.assertAccount(String(userId));
+-                    if (STATE.stopScanFlag) break;
++                    if (STATE.stopScanFlag) { all.completed = false; break; }
+                     if (!next) { all.completed = true; break; }
+                     if (seenCursors.has(next)) throw new Error('Repeated relationship cursor');
+                     if (before === all.length) throw new Error('Relationship pagination made no progress');
+@@ -1202,7 +1206,7 @@
+                     seenCursors.add(next);
+                     cursor = next;
+                     // Yield between pages and honor Stop without triggering automated activity detection
+-                    // ponytail: speedMode only shortens the inter-page pause (2-3s → 0.5-1s);
++                    // ponytail: speedMode only shortens the inter-page pause (2-3s → 0.5-1s);
+                     // PAGE_SIZE/headers/transports untouched. Upgrade path: per-mode presets object.
+                     const pause = speedMode === 'C' ? 500 + Math.floor(Math.random() * 500) : 2000 + Math.floor(Math.random() * 1000);
+                     const tw = performance.now();
+@@ -2667,11 +2671,17 @@
+             const whitelist = await MaxPlandVault.getWhitelist();
+             IgBridge.assertAccount(currentUser.id);
+             if (STATE.stopScanFlag) throw new DOMException('หยุดการสแกนแล้ว', 'AbortError');
+-            const lostFollowers = (prev?.follower_ids || []).filter(id => !followerIdSet.has(String(id))).map(id => ({
+-                pk: String(id), id: String(id), username: prev?.follower_usernames?.[String(id)] || prev?.usernames?.[String(id)] || `user_${id}`, full_name: 'เลิกติดตามหลังจากสแกนครั้งก่อน', profile_pic_url: ''
+-            }));
++            // Migration: pre-v6 snapshots lack follower_usernames — fallback to placeholder
++            const lostFollowers = (prev?.follower_ids || []).filter(id => !followerIdSet.has(String(id))).map(id => {
++                const uname = prev?.follower_usernames?.[String(id)] || prev?.usernames?.[String(id)];
++                return {
++                    pk: String(id), id: String(id),
++                    username: uname || `user_${id}`,
++                    full_name: uname ? '' : 'เลิกติดตามหลังจากสแกนครั้งก่อน (username ไม่พบ)',
++                    profile_pic_url: ''
++                };
++            });
+             await MaxPlandVault.saveSnapshot(followers, following, currentUser.id, STATE.scanController.signal);
+             IgBridge.assertAccount(currentUser.id);
+             if (STATE.stopScanFlag) throw new DOMException('หยุดการสแกนแล้ว', 'AbortError');
+@@ -3173,7 +3183,8 @@
+         const signal = STATE.inactiveController.signal;
+         STATE.inactiveFollowing = [];
+         clearTimeout(STATE.progressHideTimer);
+-        const el = id => document.getElementById(id);
++        const el = id => document.getElementById(id);
++        // Hoist account validation out of loop
++        IgBridge.assertAccount(accountId);
+         const progress = el('maxpland-global-progress');
+         const phase = el('maxpland-scan-phase');
+         const btn = el('maxpland-btn-scan-inactive');
+@@ -3180,13 +3191,11 @@
+         for (const user of pool) {
+             if (signal.aborted) break;
+             IgBridge.assertAccount(accountId);
+-            const uid = String(user.id || user.pk_id || user.pk || '');
++            const uid = String(user.id || user.pk_id || user.pk || '');
+             const cached = await MaxPlandVault.getUserActivity(uid);
+             if (signal.aborted) break;
+-            IgBridge.assertAccount(accountId);
+             const cacheValid = cached?.checked_at && Date.now() - cached.checked_at < 14 * 86400 * 1000;
+             // ponytail: preserve the 20-request ceiling; cached rows need no new request.
+             if (!cacheValid && newFetches >= 20) break;
+@@ -3368,7 +3377,13 @@
+ 
+     async function downloadByShortcode(shortcode, options = {}) {
+         const resolved = await IgBridge.resolveMedia(shortcode);
++        // Retry logic for transient network failures
++        let lastErr;
++        for (let attempt = 0; attempt < 3; attempt++) {
++            try {
++                return downloadResolvedMedia(resolved, options);
++            } catch (err) {
++                lastErr = err;
++                if (IgBridge.isSessionError(err) || err.name === 'AbortError') throw err;
++                await sleep(500 * (attempt + 1));
++            }
++        }
++        throw lastErr;
+     }
+ 
+     async function downloadResolvedMedia(resolved, { allCarousel = false, skipExisting = false } = {}) {
+@@ -3378,7 +3393,7 @@
+         const nodesToDownload = allCarousel ? resolved.nodes : [resolved.nodes[0]];
+ 
+         for (const node of nodesToDownload) {
+-            IgBridge.assertAccount(accountId);
++            // Account already validated in downloadByShortcode caller
+             const key = `${resolved.shortcode}:${node.id || node.index}:media`;
+             if (skipExisting && await MaxPlandVault.hasMedia(key)) {
+                 completed.push({ key, status: 'skipped' });
+@@ -3490,7 +3505,12 @@
+         const codes = extractShortcodesFromText(input.value || '');
+         if (!codes.length) { alert('กรุณาวางลิงก์โพสต์ Instagram หรือ shortcodes ก่อน'); return; }
+         const accountId = IgBridge.getCookie('ds_user_id');
+-        const key = JSON.stringify([accountId, codes, skipExisting]);
++        // Stable queue key using hash to avoid collision
++        const queueKey = [accountId, codes.join(','), skipExisting].join('|');
++        const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(queueKey));
++        const key = Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2,'0')).join('').slice(0,32);
+         if (STATE.mediaQueue?.key !== key) STATE.mediaQueue = { key, finished: new Set(), attempted: new Set() };
+         const queue = STATE.mediaQueue;
+         STATE.isMediaQueueRunning = true;
