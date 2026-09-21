@@ -210,6 +210,16 @@ Stream high-resolution assets directly to disk without quality degradation.
 3. **Local Storage Only:** Relationship snapshots, settings, and media logs reside solely in client-side IndexedDB (`IG_MAXPLAND_VAULT`).
 4. **Zero CDN Inclusions:** Self-contained script with zero `@require` dependencies eliminates supply-chain vulnerabilities.
 
+### 🛡️ Anti-Detection Mathematical Safety Model
+
+Meta deploys machine-learning anomaly detectors on Instagram Web to flag automated bot activity. IG MaxPland operates strictly within human behavioral envelopes:
+
+1. **Bounded Batch Ceiling:** Profile queries are hard-capped at **20 fresh profiles per batch**. Subsequent lookups require explicit user action, preventing runaway requests.
+2. **Randomized Jitter Interval:** Delays are calculated with dynamic human-like jitter rather than mechanical intervals:
+   $$\Delta t = \text{base} + \text{random}(0, 3000\text{ms}) \quad (\text{where } \text{base} = 4,500\text{ms})$$
+   This distributes calls between **4.5s and 7.5s**, blending seamlessly into natural scrolling cadence.
+3. **Session-Native Header Parity:** Sends genuine browser headers (`X-ASBD-ID`, dynamic `X-IG-WWW-Claim`) extracted directly from the user's active session, leaving zero third-party bot signatures.
+
 ---
 
 ## 🏗️ Clean Architecture & Project Structure
