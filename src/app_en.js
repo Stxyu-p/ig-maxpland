@@ -978,6 +978,8 @@
                         const delay = retry && /^\d+(\.\d+)?$/.test(retry) ? Number(retry) * 1000 : Date.parse(retry) - Date.now();
                         this.cooldownUntil = Date.now() + Math.max(60000, Number.isFinite(delay) ? delay : 60000);
                         this.cooldownAccount = accountId;
+                        // Surface the cooldown once at the moment it starts (all flows: scan/unfollow/media).
+                        showToast(`⏳ Instagram rate limit — waiting ${Math.max(1, Math.ceil((this.cooldownUntil - Date.now()) / 1000))}s before the next request`, 4000);
                         throw this.error('Instagram rate limit active. Please rest before trying again.', 'RATE_LIMIT', res.status);
                     }
                     if (res.status === 403) throw this.error('Instagram forbidden (403). Check account status on web.', 'AUTH', 403);
@@ -1078,11 +1080,26 @@
             all.pagesFetched = 0;
             const seenUsers = new Set(), seenCursors = new Set();
             let cursor = null, transport = 'rest';
+            // Scan resume: a stopped/paused scan persists cursor+users per page; cleared on completion.
+            const RESUME_KEY = `mp_scan_resume_${endpoint}`;
+            let savedResume = null;
+            try { savedResume = JSON.parse(localStorage.getItem(RESUME_KEY) || 'null'); } catch (_) {}
+            if (savedResume && String(savedResume.userId) === String(userId) && Array.isArray(savedResume.users) && savedResume.cursor) {
+                for (const u of savedResume.users) {
+                    if (!seenUsers.has(String(u.id))) { seenUsers.add(String(u.id)); all.push(u); }
+                }
+                cursor = String(savedResume.cursor);
+                transport = savedResume.transport === 'graphql' ? 'graphql' : 'rest';
+                all.pagesFetched = Number(savedResume.pagesFetched) || 0;
+                onProgress?.(all.length, all.pagesFetched, `Resumed saved scan at page ${all.pagesFetched} (${all.length.toLocaleString()} users kept)`);
+            }
             const signal = STATE.scanController?.signal;
             const limit = Math.max(1, Math.min(250, Number(pageSafetyLimit) || 250));
             const fetchStats = { requestMs: 0, waitMs: 0 };
             try {
                 while (!STATE.stopScanFlag) {
+                    while (STATE.scanPaused && !STATE.stopScanFlag) await sleep(250);
+                    if (STATE.stopScanFlag) break;
                     this.assertAccount(String(userId));
                     let data;
                     try {
@@ -1128,12 +1145,15 @@
                     onProgress?.(all.length, all.pagesFetched, null);
                     this.assertAccount(String(userId));
                     if (STATE.stopScanFlag) break;
-                    if (!next) { all.completed = true; break; }
+                    if (!next) { all.completed = true; try { localStorage.removeItem(RESUME_KEY); } catch (_) {} break; }
                     if (seenCursors.has(next)) throw new Error('Repeated relationship cursor');
                     if (before === all.length) throw new Error('Relationship pagination made no progress');
                     if (all.pagesFetched >= limit) throw new Error(`Safety page limit reached (${limit} pages)`);
                     seenCursors.add(next);
                     cursor = next;
+                    try {
+                        localStorage.setItem(RESUME_KEY, JSON.stringify({ userId: String(userId), cursor, transport, pagesFetched: all.pagesFetched, users: all }));
+                    } catch (_) { /* quota exceeded: resume survives only while storage allows */ }
                     // Yield between pages and honor Stop without triggering automated activity detection
                     // ponytail: speedMode only shortens the inter-page pause (2-3s → 0.5-1s);
                     // PAGE_SIZE/headers/transports untouched. Upgrade path: per-mode presets object.
@@ -1650,6 +1670,7 @@
                         <span id="maxpland-scan-stat-count">Users: 0</span>
                         <span id="maxpland-scan-stat-page">Pages: 0</span>
                         <span id="maxpland-scan-stat-timer">⏱️ 00:00</span>
+                        <button type="button" class="maxpland-btn-secondary" id="maxpland-btn-pause-scan" style="display:none" title="Pause the running scan; progress is saved page by page">⏸ Pause</button>
                         <button type="button" class="maxpland-btn-danger" id="maxpland-btn-stop-scan">${ICONS.STOP} Stop</button>
                     </div>
                 </div>
@@ -1708,6 +1729,9 @@
                             </button>
                             <button class="maxpland-pill-btn" data-filter="ghost">
                                 👻 Ghost <span class="maxpland-pill-count" id="pill-count-ghost">-</span>
+                            </button>
+                            <button class="maxpland-pill-btn" data-filter="renamed">
+                                ✏️ Renamed <span class="maxpland-pill-count" id="pill-count-renamed">-</span>
                             </button>
                             <button class="maxpland-pill-btn" data-filter="inactive">
                                 ⏱️ Inactive <span class="maxpland-pill-count" id="pill-count-inactive">-</span>
@@ -2240,6 +2264,12 @@
             STATE.stopUnfollowFlag = true;
             document.getElementById('maxpland-scan-phase').textContent = 'Stopping scan as requested...';
         });
+        document.getElementById('maxpland-btn-pause-scan').addEventListener('click', () => {
+            STATE.scanPaused = !STATE.scanPaused;
+            const pb = document.getElementById('maxpland-btn-pause-scan');
+            pb.textContent = STATE.scanPaused ? '▶ Resume' : '⏸ Pause';
+            document.getElementById('maxpland-scan-phase').textContent = STATE.scanPaused ? 'Scan paused — progress saved page by page' : 'Fetching relationship pages...';
+        });
 
         // Whitelist Backup & Restore
         document.getElementById('maxpland-btn-backup-whitelist').addEventListener('click', exportWhitelistBackup);
@@ -2549,10 +2579,10 @@
         const notice = el('maxpland-scan-notice');
         const summary = el('maxpland-scan-status-summary');
         STATE.scanIncomplete = true;
-        for (const key of ['followers','following','notFollowingBack','fans','mutual','lostFollowers','ghostFollowers']) STATE[key] = [];
+        for (const key of ['followers','following','notFollowingBack','fans','mutual','lostFollowers','ghostFollowers','renamed']) STATE[key] = [];
         STATE.selectedIds.clear();
         updateBulkActionBar();
-        for (const id of ['stat-not-following-back','stat-fans','stat-mutual','stat-lost','stat-ghost','pill-count-not','pill-count-fans','pill-count-mutual','pill-count-lost','pill-count-ghost']) {
+        for (const id of ['stat-not-following-back','stat-fans','stat-mutual','stat-lost','stat-ghost','pill-count-not','pill-count-fans','pill-count-mutual','pill-count-lost','pill-count-ghost','pill-count-renamed']) {
             if (el(id)) el(id).textContent = '-';
         }
         renderRelationshipList();
@@ -2560,6 +2590,10 @@
         try {
             btn.disabled = true;
             progress.style.display = 'block';
+            STATE.scanPaused = false;
+            const pauseBtn = document.getElementById('maxpland-btn-pause-scan');
+            pauseBtn.style.display = '';
+            pauseBtn.textContent = '⏸ Pause';
             phase.textContent = 'Verifying account...';
             notice.style.display = 'none';
             summary.textContent = '';
@@ -2656,18 +2690,46 @@
             IgBridge.assertAccount(currentUser.id);
             if (STATE.stopScanFlag) throw new DOMException('Scan aborted by user', 'AbortError');
             const idxMap = prev?.user_index ? new Map(Object.entries(prev.user_index)) : new Map();
-            const lostFollowers = (prev?.follower_ids || []).filter(id => !followerIdSet.has(String(id))).map(id => ({
-                pk: String(id), id: String(id), username: prev?.follower_usernames?.[String(id)] || prev?.usernames?.[String(id)] || idxMap.get(String(id)) || `user_${id}`, full_name: 'Unfollowed since the previous scan', profile_pic_url: ''
-            }));
+            const prevUsernames = { ...(prev?.follower_usernames || {}), ...(prev?.usernames || {}) };
+            const lostFollowers = (prev?.follower_ids || []).filter(id => !followerIdSet.has(String(id))).map(id => {
+                const sid = String(id);
+                const uname = prevUsernames[sid] || idxMap.get(sid) || `user_${sid}`;
+                // Block detector: gone from followers AND from our following list -> blocked us
+                // or deactivated. Still in following -> plain unfollow.
+                const gone = !followingIdSet.has(sid) && !followingUsernameSet.has(String(uname).toLowerCase());
+                return {
+                    pk: sid, id: sid, username: uname, profile_pic_url: '',
+                    full_name: gone ? 'Gone — blocked us or deactivated' : 'Unfollowed since the previous scan'
+                };
+            });
+            // Rename detector: same follower ids whose username changed since the previous scan.
+            const renamed = [];
+            if (prev && typeof prevUsernames === 'object') {
+                const currentById = new Map(followers.map(f => [String(f.id || f.pk_id || f.pk || ''), f]));
+                for (const [sid, oldName] of Object.entries(prevUsernames)) {
+                    if (!oldName) continue;
+                    const now = currentById.get(sid);
+                    const newName = String(now?.username || '');
+                    if (now && newName && newName.toLowerCase() !== oldName.toLowerCase()) {
+                        renamed.push({
+                            pk: sid, id: sid, username: newName,
+                            full_name: `Renamed from @${oldName}`,
+                            profile_pic_url: now.profile_pic_url || '',
+                            is_verified: Boolean(now.is_verified), is_private: Boolean(now.is_private),
+                            has_anonymous_profile_picture: Boolean(now.has_anonymous_profile_picture)
+                        });
+                    }
+                }
+            }
             await MaxPlandVault.saveSnapshot(followers, following, currentUser.id, STATE.scanController.signal);
             IgBridge.assertAccount(currentUser.id);
             if (STATE.stopScanFlag) throw new DOMException('Scan aborted by user', 'AbortError');
-            Object.assign(STATE, { followers, following, whitelist, lostFollowers, scanIncomplete: false,
+            Object.assign(STATE, { followers, following, whitelist, lostFollowers, renamed, scanIncomplete: false,
                 notFollowingBack: following.filter(u => !isFollower(u)),
                 fans: followers.filter(u => !isFollowing(u)),
                 mutual: following.filter(u => isFollower(u)),
                 ghostFollowers: followers.filter(u => hasNoAvatar(u)) });
-            for (const [stat, pill, key] of [['not-following-back','not','notFollowingBack'],['fans','fans','fans'],['mutual','mutual','mutual'],['lost','lost','lostFollowers'],['ghost','ghost','ghostFollowers']]) {
+            for (const [stat, pill, key] of [['not-following-back','not','notFollowingBack'],['fans','fans','fans'],['mutual','mutual','mutual'],['lost','lost','lostFollowers'],['ghost','ghost','ghostFollowers'],['renamed','renamed','renamed']]) {
                 if (el(`stat-${stat}`)) el(`stat-${stat}`).textContent = STATE[key].length.toLocaleString();
                 if (el(`pill-count-${pill}`)) el(`pill-count-${pill}`).textContent = STATE[key].length.toLocaleString();
             }
@@ -2682,6 +2744,7 @@
             summary.textContent = `Followers ${followers.length.toLocaleString()} · Following ${following.length.toLocaleString()} · Fetch ${fmtMs(STATE.scanStatus.requestMs)} · Pacing ${fmtMs(STATE.scanStatus.waitMs)} · Total ${fmtMs(STATE.scanStatus.wallMs)}`;
             showToast('Scan completed successfully');
         } catch (err) {
+            if (err?.code === 'RATE_LIMIT') showToast(`⏳ ${err.message} — retry after the cooldown ends.`, 5000);
             phase.textContent = STATE.stopScanFlag || err.name === 'AbortError' ? 'Scan stopped' : 'Scan failed';
             notice.textContent = `⚠️ ${err.message} · Relationships not updated`;
             notice.style.display = 'block';
@@ -2691,6 +2754,10 @@
             btn.disabled = false;
             STATE.isScanning = false;
             STATE.scanController = null;
+            STATE.scanPaused = false;
+            const pauseBtnEnd = document.getElementById('maxpland-btn-pause-scan');
+            pauseBtnEnd.style.display = 'none';
+            pauseBtnEnd.textContent = '⏸ Pause';
             renderRelationshipList();
             // Keep failed scan diagnostics visible until the next action.
             if (!STATE.scanIncomplete) STATE.progressHideTimer = setTimeout(() => { progress.style.display = 'none'; }, 2500);
@@ -2708,6 +2775,7 @@
         else if (STATE.relationshipFilter === 'mutual') pool = STATE.mutual;
         else if (STATE.relationshipFilter === 'lost') pool = STATE.lostFollowers;
         else if (STATE.relationshipFilter === 'ghost') pool = STATE.ghostFollowers;
+        else if (STATE.relationshipFilter === 'renamed') pool = STATE.renamed || [];
         else if (STATE.relationshipFilter === 'inactive') pool = STATE.inactiveFollowing;
         else if (STATE.relationshipFilter === 'whitelist') pool = Array.from(STATE.whitelist.values());
 
@@ -3327,7 +3395,7 @@
                 const points = counts.map((c, i) => {
                     const x = pad + (i / (counts.length - 1)) * (w - pad * 2);
                     const y = h - pad - ((c - min) / range) * (h - pad * 2);
-                    return { x, y, val: c, date: new Date(sorted[i].timestamp).toLocaleDateString('th-TH') };
+                    return { x, y, val: c, date: new Date(sorted[i].timestamp).toLocaleDateString('en-GB') };
                 });
 
                 const polyline = points.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
