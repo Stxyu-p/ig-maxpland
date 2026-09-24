@@ -942,6 +942,14 @@
         static cooldownUntil = 0;
         static cooldownAccount = null;
 
+        // Story viewer analytics: who viewed MY story media (private web endpoint).
+        static async fetchStoryViewers(mediaId) {
+            if (!/^\d+$/.test(String(mediaId || ''))) throw new Error('Invalid story media id');
+            const data = await this.request(`/api/v1/media/${String(mediaId)}/list_reel_media_viewer/`);
+            if (data?.status === 'ok' || Array.isArray(data?.users)) return Array.isArray(data.users) ? data.users : [];
+            return [];
+        }
+
         static error(message, code, status = 0) {
             return Object.assign(new Error(message), { code, status });
         }
@@ -2089,6 +2097,35 @@
         document.body.appendChild(modal);
 
         bindUIEvents(triggerBtn, overlay, modal);
+    }
+
+    function renderViewerPanel(anchor, viewers) {
+        let panel = document.getElementById('maxpland-viewer-panel');
+        if (!panel) {
+            panel = document.createElement('div');
+            panel.id = 'maxpland-viewer-panel';
+            panel.style.cssText = 'position:fixed;z-index:99999;min-width:240px;max-width:300px;max-height:320px;overflow:auto;background:var(--mp-bg-panel,#14161a);border:1px solid var(--mp-border-card,#262a30);border-radius:10px;padding:10px 12px;color:#e6edf3;font-size:12.5px;box-shadow:0 8px 30px rgba(0,0,0,.45);';
+            document.body.appendChild(panel);
+            document.addEventListener('click', e => {
+                const p = document.getElementById('maxpland-viewer-panel');
+                if (p && !p.contains(e.target) && !e.target.closest?.('.maxpland-story-btn')) p.remove();
+            });
+        }
+        const rect = anchor.getBoundingClientRect();
+        panel.style.left = Math.max(8, Math.min(window.innerWidth - 308, rect.left)) + 'px';
+        panel.style.top = Math.max(8, rect.top - 8) + 'px';
+        panel.style.transform = 'translateY(-100%)';
+        if (!viewers.length) {
+            panel.innerHTML = '<div style="color:var(--mp-text-muted,#8b949e);">No viewer data (story may not be yours, expired, or private).</div>';
+            return;
+        }
+        const rows = viewers.slice(0, 100).map(u => {
+            // API response is a trust boundary: strip anything outside IG's username charset.
+            const name = String(u.username || u.pk || 'unknown').replace(/[^A-Za-z0-9._-]/g, '').slice(0, 40) || 'unknown';
+            const when = u.timestamp ? new Date(u.timestamp * 1000).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+            return `<div style="display:flex;justify-content:space-between;gap:8px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.05);"><span>@${name}</span><span style="color:var(--mp-text-muted,#8b949e);white-space:nowrap;">${when}</span></div>`;
+        }).join('');
+        panel.innerHTML = `<div style="font-weight:600;margin-bottom:6px;">👁 ${viewers.length.toLocaleString()} viewer${viewers.length === 1 ? '' : 's'}</div>${rows}`;
     }
 
     function showToast(message, duration = 2500) {
@@ -4091,6 +4128,33 @@
         openBtn.className = 'maxpland-story-btn';
         openBtn.innerHTML = '<span>↗ Open Raw</span>'; // literal-only markup, no user-controlled data (same pattern as stealthBtn)
         openBtn.title = 'Open the current story media URL in a new tab (save from there manually)';
+        const viewersBtn = document.createElement('button');
+        viewersBtn.type = 'button';
+        viewersBtn.id = 'maxpland-story-viewers-btn';
+        viewersBtn.className = 'maxpland-story-btn';
+        viewersBtn.innerHTML = '<span>👁 Viewers</span>'; // literal-only markup, same pattern as siblings
+        viewersBtn.title = 'Who viewed this story (your own stories only)';
+        viewersBtn.onclick = async () => {
+            viewersBtn.disabled = true;
+            try {
+                const mediaId = (() => {
+                    const active = typeof getActiveStorySection === 'function' ? getActiveStorySection() : null;
+                    const link = active?.querySelector?.('a[href*="/stories/"]');
+                    const m = (link?.getAttribute?.('href') || location.pathname).match(/\/stories\/[^\/]+\/(\d+)/);
+                    return m ? m[1] : null;
+                })();
+                if (!mediaId) { showToast('Open a specific story first (no media id in view)'); return; }
+                showToast('Loading story viewers...');
+                const viewers = await IgBridge.fetchStoryViewers(mediaId);
+                renderViewerPanel(viewersBtn, viewers);
+            } catch (err) {
+                console.warn('[MaxPland] Story viewers failed', err);
+                showToast('Viewers unavailable — works on your own stories only');
+            } finally {
+                viewersBtn.disabled = false;
+            }
+        };
+
         openBtn.onclick = async () => {
             // Open the tab synchronously inside the click gesture to dodge popup blockers,
             // then fill in the real URL once the resolver settles.
@@ -4110,7 +4174,7 @@
             }
         };
 
-        bar.append(stealthBtn, openBtn);
+        bar.append(stealthBtn, openBtn, viewersBtn);
         document.body.appendChild(bar);
     }
 

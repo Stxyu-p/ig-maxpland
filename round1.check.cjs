@@ -213,9 +213,10 @@ test('Story toolbar renders only 1 button (Stealth Mode) and omits download butt
     const bar = h.document.getElementById('maxpland-story-bar');
     assert.ok(bar, 'story bar must be injected');
     const buttons = bar.children.filter(c => c.tagName === 'BUTTON');
-    assert.equal(buttons.length, 2, 'must render exactly 2 buttons: Stealth toggle + Open Raw');
+    assert.equal(buttons.length, 3, 'must render exactly 3 buttons: Stealth toggle + Open Raw + Viewers');
     assert.ok(buttons.some(b => b.id === 'maxpland-story-stealth-toggle'), 'stealth toggle present');
     assert.ok(buttons.some(b => b.id === 'maxpland-story-open-btn'), 'open raw tab button present');
+    assert.ok(buttons.some(b => b.id === 'maxpland-story-viewers-btn'), 'story viewers button present');
     assert.ok(!buttons.some(b => b.id === 'maxpland-story-dl-btn'), 'download story button stays removed (fragile per v2.7.2)');
     assert.ok(!buttons.some(b => b.id === 'maxpland-story-cover-btn'), 'cover button stays removed');
 });
