@@ -22,31 +22,13 @@ const DIST_DIR = path.join(ROOT_DIR, 'dist');
 const OUTPUT_FILENAME = 'ig_maxpland_en.user.js';
 const APP_SOURCE_PATH = path.join(ROOT_DIR, 'src', 'app_en.js');
 
-// Topological module concatenation list
-const MODULE_FILES = [
-    // 1. Utilities
-    'src/utils/Utils.js',
-    'src/utils/DOMUtils.js',
-    'src/utils/IGSelectors.js',
-    // 2. Core Modules
-    'src/modules/IgAuth.js',
-    'src/modules/IgTransport.js',
-    'src/modules/IgRelationship.js',
-    'src/modules/IgMedia.js',
-    'src/modules/IgProfile.js',
-    'src/modules/IgUnfollow.js',
-    // 3. State & UI Engines
-    'src/core/StateManager.js',
-    'src/core/FilterEngine.js',
-    'src/ui/TemplateEngine.js',
-    'src/ui/ProgressController.js',
-    'src/ui/EventDelegator.js',
-    // 4. Feature Modules
-    'src/features/MediaDownloader.js',
-    'src/features/DOMInjector.js',
-    'src/features/StoryStealth.js',
-    'src/features/CleanFeed.js'
-];
+// ponytail: bundle list is empty as of 2026-09-24 — the EN runtime (src/app_en.js)
+// implements every flow itself (IgBridge + inline features; only guarded
+// IgRelationship.hasNoAvatar is consulted and it has a local fallback), so the
+// 17 extracted modules were 190 KB of dead weight parsed at document-start.
+// Module files stay in src/ and phase1-5 tests exercise them directly.
+// To re-integrate: list a module here once the app actually calls it.
+const MODULE_FILES = [];
 
 function getPackageMetadata() {
     if (!fs.existsSync(PKG_PATH)) {
@@ -104,7 +86,7 @@ function buildTarget() {
 
     let bundle = header + '\n(() => {\n    \'use strict\';\n\n';
     bundle += '    /* ==========================================================================\n';
-    bundle += '       MODULAR CORE ARCHITECTURE (v3.0.0 Clean Architecture - Global English)\n';
+    bundle += '       APPLICATION RUNTIME - Global English (modules live in src/, covered by phase1-5)\n';
     bundle += '       ========================================================================== */\n\n';
 
     // 1. Concatenate extracted modules

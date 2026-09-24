@@ -1052,6 +1052,10 @@
             const count = Math.min(50, Math.max(1, Number(APP_CONFIG.PAGE_SIZE) || 50));
             if (options.transport === 'graphql') {
                 // Compatibility route used by Instaloader's Profile.get_followers/get_followees.
+                if (!window.__mpGqlTransportWarned) {
+                    window.__mpGqlTransportWarned = true;
+                    console.warn('[MaxPland] Legacy GraphQL relationship transport active (query_hash can rotate; REST remains primary)');
+                }
                 const hash = endpoint === 'followers' ? '37479f2b8209594dde7facb0d904896a' : '58712303d941c6855d4e888c5f0cd22f';
                 const variables = { id: uid, first: count, ...(cursor ? { after: cursor } : {}) };
                 const qs = new URLSearchParams({ query_hash: hash, variables: JSON.stringify(variables) });
@@ -1569,7 +1573,10 @@
                     scanArticles();
                 }, 150);
             });
-            cleanFeedObserver.observe(document.body || document.documentElement, { childList: true, subtree: true });
+            // ponytail: scope to <main> (the feed always lives there) with a body fallback —
+            // stops reacting to every sidebar/dialog/header mutation IG performs.
+            const feedRoot = document.querySelector('main') || document.body || document.documentElement;
+            cleanFeedObserver.observe(feedRoot, { childList: true, subtree: true });
         }
     }
 
@@ -4062,7 +4069,13 @@
                 }
             }, 300);
         });
-        observer.observe(document.body, { childList: true, subtree: true });
+        // ponytail: story bar / feed buttons / avatar badge all live under <main>;
+        // the profile header badge lives under <header>. Observe both roots and
+        // fall back to body when either is missing (degrades to the old scope).
+        const pageRoots = [document.querySelector('main'), document.querySelector('header')].filter(Boolean);
+        for (const root of (pageRoots.length ? pageRoots : [document.body])) {
+            observer.observe(root, { childList: true, subtree: true });
+        }
     }
 
     /* ==========================================================================
