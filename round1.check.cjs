@@ -606,7 +606,7 @@ test('Batch confirm quotes the configured delay, not stale prose', async () => {
 test('Select checkbox exposes an accessible name', () => {
     assert.match(source, /user-select-checkbox[^>]*aria-label=/, 'row checkbox needs an accessible name');
 });
-test('Inter-page scan pacing stays uniformly short', async () => {
+test('Inter-page pacing honors the Safe preset jitter window', async () => {
     const h = harness();
     const PAGES = 8, PER = 3;
     let page = 0, cur = 0;
@@ -623,7 +623,7 @@ test('Inter-page scan pacing stays uniformly short', async () => {
     assert.equal(all.length, PAGES * PER, 'all pages fetched and deduped');
     pauses.shift(); // no pause precedes page 1
     assert.equal(pauses.length, PAGES - 1, 'one pause per inter-page gap');
-    for (const p of pauses) assert.ok(p <= 3000, `pause ${Math.round(p)}ms exceeds the uniform 2-3s budget`);
+    for (const p of pauses) assert.ok(p >= 6000 && p <= 12250, `pause ${Math.round(p)}ms outside the A Safe window (6-12s + chunk overshoot)`);
 });
 
 function perfHarness(pageCount, { usersPerPage = 12 } = {}) {
@@ -662,7 +662,7 @@ test('Scan speed lives in settings prefs, defaults to A, gone from action bar', 
     assert.equal(source.includes('maxpland-scan-speed'), false, 'old action-bar select must be removed');
     assert.match(source, /scanSpeed/, 'prefs must persist scanSpeed');
 });
-test('A is sequential; B and C overlap only the two endpoints', async () => {
+test('Every speed mode fetches serially (peak concurrency 1)', async () => {
     for (const mode of ['A', 'B', 'C', 'invalid']) {
         const h = perfHarness(1); let active = 0, peak = 0, calls = 0;
         h.STATE.prefs.scanSpeed = mode;
@@ -674,7 +674,8 @@ test('A is sequential; B and C overlap only the two endpoints', async () => {
             return Object.assign([], { completed: true });
         };
         await h.runRelationshipScan();
-        assert.equal(calls, 2); assert.equal(peak, ['B', 'C'].includes(mode) ? 2 : 1);
+        assert.equal(calls, 2);
+        assert.equal(peak, 1, `${mode}: every mode must fetch serially — combined request rate is what detection sees`);
         assert.equal(h.STATE.scanIncomplete, false);
     }
 });
@@ -686,9 +687,9 @@ test('C confirmation can cancel without starting any request', async () => {
     await h.runRelationshipScan();
     assert.equal(calls, 0); assert.equal(h.STATE.isScanning, false);
 });
-test('Concurrent failure cancels sibling, drains workers and never saves partial snapshot', async () => {
+test('Fetch failure stops the scan before the second list; never saves partial snapshot', async () => {
     for (const code of ['RATE_LIMIT', 'CHECKPOINT', 'AUTH', 'ACCOUNT_CHANGED', 'PAYLOAD']) {
-        const h = perfHarness(1); let saved = 0, drained = false;
+        const h = perfHarness(1); let saved = 0, secondListStarted = false;
         h.STATE.prefs.scanSpeed = 'B';
         h.MaxPlandVault.saveSnapshot = async () => { saved++; };
         h.IgBridge.fetchAllRelationships = async endpoint => {
@@ -696,25 +697,27 @@ test('Concurrent failure cancels sibling, drains workers and never saves partial
                 await new Promise(resolve => setImmediate(resolve));
                 return Object.assign([], { completed: false, lastError: Object.assign(new Error(code), { code }) });
             }
-            const signal = h.STATE.scanController.signal;
-            await new Promise(resolve => signal.addEventListener('abort', resolve, { once: true }));
-            await new Promise(resolve => setImmediate(resolve)); drained = true;
-            return Object.assign([], { completed: false, lastError: new DOMException('Stopped', 'AbortError') });
+            secondListStarted = true;
+            return Object.assign([], { completed: true });
         };
         await h.runRelationshipScan();
-        assert.equal(saved, 0); assert.equal(drained, true); assert.equal(h.STATE.scanIncomplete, true);
+        assert.equal(saved, 0);
+        assert.equal(secondListStarted, false, 'serial mode must not start the second list after a failure');
+        assert.equal(h.STATE.scanIncomplete, true);
         assert.equal(h.STATE.scanController, null);
         assert.match(h.document.getElementById('maxpland-scan-notice').textContent, new RegExp(code));
     }
 });
-test('C reduces only inter-page pause; A/B retain 2-3 seconds', async () => {
+test('Each speed mode pages inside its own preset jitter window', async () => {
+    const WINDOWS = { A: [6000, 12250], B: [3000, 6250], C: [1500, 3250] };
     for (const mode of ['A', 'B', 'C']) {
         const h = harness(); let requests = 0, waited = 0;
         h.IgBridge.fetchRelationshipPage = async () => ({ users: [{ id: String(++requests) }], next_max_id: requests === 1 ? 'next' : null });
         h.setSleep(async ms => { waited += ms; });
         const result = await h.IgBridge.fetchAllRelationships('followers', '1', 250, null, mode);
         assert.equal(result.completed, true);
-        assert.ok(mode === 'C' ? waited >= 500 && waited <= 1000 : waited >= 2000 && waited <= 3000, `${mode}: ${waited}`);
+        const [lo, hi] = WINDOWS[mode];
+        assert.ok(waited >= lo && waited <= hi, `${mode}: ${waited} outside preset window ${lo}-${hi}`);
     }
 });
 test('Aborting during pause prevents the next page', async () => {
