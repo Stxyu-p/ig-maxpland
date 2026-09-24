@@ -213,11 +213,11 @@ test('Story toolbar renders only 1 button (Stealth Mode) and omits download butt
     const bar = h.document.getElementById('maxpland-story-bar');
     assert.ok(bar, 'story bar must be injected');
     const buttons = bar.children.filter(c => c.tagName === 'BUTTON');
-    assert.equal(buttons.length, 1, 'must render exactly 1 button: Stealth Mode');
+    assert.equal(buttons.length, 2, 'must render exactly 2 buttons: Stealth toggle + Open Raw');
     assert.ok(buttons.some(b => b.id === 'maxpland-story-stealth-toggle'), 'stealth toggle present');
-    assert.ok(!buttons.some(b => b.id === 'maxpland-story-dl-btn'), 'download story button removed');
-    assert.ok(!buttons.some(b => b.id === 'maxpland-story-cover-btn'), 'cover button removed');
-    assert.ok(!buttons.some(b => (b.innerHTML || '').includes('เปิดแท็บ')), 'open tab button removed');
+    assert.ok(buttons.some(b => b.id === 'maxpland-story-open-btn'), 'open raw tab button present');
+    assert.ok(!buttons.some(b => b.id === 'maxpland-story-dl-btn'), 'download story button stays removed (fragile per v2.7.2)');
+    assert.ok(!buttons.some(b => b.id === 'maxpland-story-cover-btn'), 'cover button stays removed');
 });
 
 test('Story actions pick the center/active story, never adjacent side stories', async () => {

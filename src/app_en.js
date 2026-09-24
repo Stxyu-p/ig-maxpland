@@ -3972,7 +3972,36 @@
             showToast(next ? 'Stealth Story Viewer enabled (Seen blocked)' : 'Stealth Story Viewer disabled');
         };
 
-        bar.append(stealthBtn);
+        // ponytail: story DOWNLOAD buttons stay removed (fragile per v2.7.2), but "Open Raw"
+        // only hands the resolved URL to a new tab — no download pipeline to break.
+        // Technique adapted from navchandar/Instagram_Story_Saver, re-written around our
+        // 5-layer resolver instead of blind parentNode climbing.
+        const openBtn = document.createElement('button');
+        openBtn.type = 'button';
+        openBtn.id = 'maxpland-story-open-btn';
+        openBtn.className = 'maxpland-story-btn';
+        openBtn.innerHTML = '<span>↗ Open Raw</span>'; // literal-only markup, no user-controlled data (same pattern as stealthBtn)
+        openBtn.title = 'Open the current story media URL in a new tab (save from there manually)';
+        openBtn.onclick = async () => {
+            // Open the tab synchronously inside the click gesture to dodge popup blockers,
+            // then fill in the real URL once the resolver settles.
+            const win = window.open('about:blank', '_blank', 'noopener');
+            try {
+                const media = await resolveCurrentStoryMedia();
+                if (win && media?.url && !media.isBlob) {
+                    win.location.href = media.url;
+                    return;
+                }
+                if (win) win.close();
+                showToast('Raw media URL not available for this story');
+            } catch (err) {
+                console.warn('[MaxPland] Open raw story URL failed', err);
+                if (win) win.close();
+                showToast('Could not resolve story media URL');
+            }
+        };
+
+        bar.append(stealthBtn, openBtn);
         document.body.appendChild(bar);
     }
 
