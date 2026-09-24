@@ -112,6 +112,11 @@ function buildTarget() {
         bundle += '\n})();\n';
     }
 
+    // Normalize every line break to CRLF: this file's header/glue is LF while
+    // src/app_en.js is CRLF — mixed endings make the // header block render as
+    // one joined line in CRLF-strict viewers (Tampermonkey, old editors).
+    bundle = bundle.replace(/\r\n|\r|\n/g, '\r\n');
+
     // Write output to dist and root
     fs.writeFileSync(distPath, bundle, 'utf8');
     fs.writeFileSync(rootPath, bundle, 'utf8');
