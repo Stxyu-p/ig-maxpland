@@ -1006,7 +1006,7 @@
                     clearTimeout(timeout);
                     options.signal?.removeEventListener('abort', abort);
                 }
-                await sleep(1000 * (attempt + 1));
+                await sleep(3000 * (attempt + 1)); // 3/6/9 s: a fast retry storm reads as a bot
             }
         }
 
@@ -1104,6 +1104,17 @@
             const signal = STATE.scanController?.signal;
             const limit = Math.max(1, Math.min(250, Number(pageSafetyLimit) || 250));
             const fetchStats = { requestMs: 0, waitMs: 0 };
+            // Sweet spot (2026-09-24): field studies (instaloader RateController practice,
+            // Bellingcat toolkit guidance) + own incident log — sustained metronome
+            // pagination at 2-3 s/page tripped IG automation detection; serial single
+            // streams with randomized intervals and burst-then-rest patterns did not.
+            // Combined request rate is what detection sees: never fetch lists concurrently.
+            const PACE_PRESETS = {
+                A: { page: [6000, 12000], restEvery: 30, rest: [60000, 120000] },
+                B: { page: [3000, 6000], restEvery: 40, rest: [45000, 90000] },
+                C: { page: [1500, 3000], restEvery: 50, rest: [30000, 60000] }
+            };
+            const PACE = PACE_PRESETS[speedMode] || PACE_PRESETS.A;
             try {
                 while (!STATE.stopScanFlag) {
                     while (STATE.scanPaused && !STATE.stopScanFlag) await sleep(250);
@@ -1162,12 +1173,16 @@
                     try {
                         localStorage.setItem(RESUME_KEY, JSON.stringify({ userId: String(userId), cursor, transport, pagesFetched: all.pagesFetched, users: all }));
                     } catch (_) { /* quota exceeded: resume survives only while storage allows */ }
-                    // Yield between pages and honor Stop without triggering automated activity detection
-                    // ponytail: speedMode only shortens the inter-page pause (2-3s → 0.5-1s);
-                    // PAGE_SIZE/headers/transports untouched. Upgrade path: per-mode presets object.
-                    const pause = speedMode === 'C' ? 500 + Math.floor(Math.random() * 500) : 2000 + Math.floor(Math.random() * 1000);
+                    // Yield between pages: jittered per-mode delay + periodic long rest
+                    // (honor Stop/pause throughout). PAGE_SIZE/headers/transports untouched.
+                    const pause = PACE.page[0] + Math.floor(Math.random() * (PACE.page[1] - PACE.page[0]));
                     const tw = performance.now();
                     for (let ms = 0; ms < pause && !STATE.stopScanFlag && !signal?.aborted; ms += 250) await sleep(250);
+                    if (PACE.restEvery && next && all.pagesFetched % PACE.restEvery === 0 && !STATE.stopScanFlag && !signal?.aborted) {
+                        const rest = PACE.rest[0] + Math.floor(Math.random() * (PACE.rest[1] - PACE.rest[0]));
+                        onProgress?.(all.length, all.pagesFetched, `Breathing rest ${Math.round(rest / 1000)}s — keeps request rate under the detection radar...`);
+                        for (let ms = 0; ms < rest && !STATE.stopScanFlag && !signal?.aborted; ms += 250) await sleep(250);
+                    }
                     fetchStats.waitMs += performance.now() - tw;
                     if (STATE.stopScanFlag || signal?.aborted) break;
                 }
@@ -1988,10 +2003,10 @@
                         <div class="maxpland-settings-row">
                             <div>
                                 <div style="font-weight:600;font-size:13px;">Scan Speed</div>
-                                <div style="font-size:11.5px;color:var(--mp-text-muted);">A sequential · B fetches both lists concurrently (~2x) · C fastest but shortens inter-page pacing, higher rate-limit risk</div>
+                                <div style="font-size:11.5px;color:var(--mp-text-muted);">A Safe 6–12 s/page · B ~2x faster 3–6 s/page · C fastest 1.5–3 s/page — all modes serial with jittered delays + breathing rests</div>
                             </div>
-                            <select id="pref-setting-scan-speed" class="maxpland-select" aria-label="Scan speed" title="A: Normal (sequential) · B: ~2x faster (fetches both lists concurrently) · C: Fastest (shorter inter-page pacing, higher rate-limit risk)">
-                                <option value="A" selected>A — Normal</option>
+                            <select id="pref-setting-scan-speed" class="maxpland-select" aria-label="Scan speed" title="A: Safe (6-12 s/page + rests, recommended) · B: ~2x faster (3-6 s/page) · C: Fastest (1.5-3 s/page, higher risk)">
+                                <option value="A" selected>A — Safe (recommended)</option>
                                 <option value="B">B — Fast ~2x</option>
                                 <option value="C">C — Fastest ~4x (high risk)</option>
                             </select>
@@ -2603,7 +2618,7 @@
     async function runRelationshipScan() {
         if (STATE.isScanning || STATE.isUnfollowing || STATE.isScanningInactive) return;
         if (STATE.prefs?.scanSpeed === 'C'
-            && !confirm('⚠️ Mode C shortens inter-page pacing to 0.5-1 s\nHigher risk of temporary Instagram rate limiting (429)\nProceed with the high-speed scan?')) return;
+            && !confirm('⚠️ Mode C pages at 1.5-3 s (fastest tier, still serial + periodic rests)\nStill higher detection risk than A/B — prefer off-peak hours\nProceed with the high-speed scan?')) return;
         STATE.isScanning = true;
         STATE.stopScanFlag = false;
         STATE.scanController = new AbortController();
@@ -2662,29 +2677,11 @@
                 if (!result.completed) throw result.lastError || new Error(`Incomplete fetch for ${endpoint}`);
                 lists[endpoint] = result;
             };
-            if (speedMode === 'A') {
-                for (const endpoint of ['followers', 'following']) {
-                    finishList(endpoint, await startList(endpoint));
-                }
-            } else {
-                // B/C: the only two list endpoints run concurrently. fetchAllRelationships
-                // resolves (never rejects), so a failure is a non-completed result: race a
-                // first-failure watcher, abort the sibling, drain, then surface the error.
-                const stagePromises = [startList('followers'), startList('following')];
-                try {
-                    const firstFailure = Promise.race(stagePromises.map(p => p.then(r => {
-                        if (!r.completed) throw r.lastError || new Error('Incomplete fetch');
-                        return null;
-                    })));
-                    await Promise.race([Promise.all(stagePromises), firstFailure]);
-                    const results = await Promise.all(stagePromises);
-                    finishList('followers', results[0]);
-                    finishList('following', results[1]);
-                } catch (err) {
-                    STATE.scanController?.abort();
-                    await Promise.allSettled(stagePromises);
-                    throw err;
-                }
+            // Every speed mode fetches serially: concurrent double-streams doubled the
+            // combined request rate — the signal automation detection watches for.
+            // Mode speed now comes purely from PACE_PRESETS inside fetchAllRelationships.
+            for (const endpoint of ['followers', 'following']) {
+                finishList(endpoint, await startList(endpoint));
             }
             const { followers, following } = lists;
             const getUid = u => String(u?.id || u?.pk_id || u?.pk || '').trim();
