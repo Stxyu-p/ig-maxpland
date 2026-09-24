@@ -50,10 +50,6 @@
         // the old 4.5-7.5 s (~500-800 actions/hour was well above safe guidance).
         UNFOLLOW_DELAY_MIN: 15000,
         UNFOLLOW_DELAY_MAX: 30000,
-        DEFAULT_AVATAR_PATTERNS: [
-            '44884218_345707102882519_2446069589734326272_n',
-            '464760996_1254146839119862_3605321457742435801_n'
-        ],
     };
 
     const ICONS = {
@@ -2574,7 +2570,8 @@
         }
         if (!user || !user.profile_pic_url) return true;
         if (user.has_anonymous_profile_picture === true) return true;
-        const patterns = Array.isArray(APP_CONFIG?.DEFAULT_AVATAR_PATTERNS) ? APP_CONFIG.DEFAULT_AVATAR_PATTERNS : [
+        // ponytail: patterns inlined at this single live site (config copy removed — identical values); hoist back to config when a second live site appears
+        const patterns = [
             '44884218_345707102882519_2446069589734326272_n',
             '464760996_1254146839119862_3605321457742435801_n'
         ];
@@ -3828,42 +3825,6 @@
         return findCenterElement(selector);
     }
 
-    function getActiveStoryUsername() {
-        const win = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
-        const doc = win.document || document;
-        const centerX = (win.innerWidth || 800) / 2;
-
-        const headers = [...doc.querySelectorAll('section header, [role="dialog"] header, header')];
-        for (const h of headers) {
-            if (typeof h.getBoundingClientRect !== 'function') continue;
-            const rect = h.getBoundingClientRect();
-            if (rect.left <= centerX && rect.right >= centerX) {
-                const userLink = typeof h.querySelector === 'function' ? h.querySelector('a[href^="/"]') : null;
-                if (userLink && typeof userLink.getAttribute === 'function') {
-                    const href = userLink.getAttribute('href') || '';
-                    const parts = href.split('/').filter(Boolean);
-                    if (parts.length > 0 && !['stories', 'explore', 'reels', 'direct'].includes(parts[0])) {
-                        return parts[0];
-                    }
-                }
-            }
-        }
-
-        const activeSec = getActiveStorySection();
-        const headerLink = typeof activeSec?.querySelector === 'function' ? activeSec.querySelector('header a')?.getAttribute?.('href') : null;
-        if (headerLink) {
-            const parts = headerLink.split('/').filter(Boolean);
-            if (parts.length > 0 && !['stories', 'explore', 'reels', 'direct'].includes(parts[0])) {
-                return parts[0];
-            }
-        }
-
-        const match = location.pathname.match(/\/stories\/([^\/]+)/);
-        if (match && match[1] && match[1] !== 'highlights') return match[1];
-
-        return 'story';
-    }
-
     function pickStoryMedia(selectorVideo, selectorImg) {
         const activeSection = getActiveStorySection();
 
@@ -4040,39 +4001,9 @@
         return { url: null, isVideo: Boolean(video), isBlob: Boolean(video?.currentSrc?.startsWith('blob:')), source: 'none' };
     }
 
-    async function resolveCurrentStoryCover() {
-        return resolveCurrentStoryMedia(true);
-    }
-
-    // ponytail: downloadCurrentStoryMedia handles one-click story media download (MP4 video or HD photo, zero UI freeze)
-    // skipped: multi-format transcoding, add when WebP/AVIF to PNG convert is requested
-    async function downloadCurrentStoryMedia(isThumb = false) {
-        try {
-            const resolved = await resolveCurrentStoryMedia(isThumb);
-            if (!resolved?.url) {
-                alert('No media URL found for this story');
-                return;
-            }
-
-            const username = getActiveStoryUsername();
-            const ext = extensionFromUrl(resolved.url, resolved.isVideo ? 'mp4' : 'jpg');
-            const filename = `${username}_story_${Date.now()}.${ext}`;
-
-            await gmDownload(resolved.url, filename);
-            showToast(resolved.isVideo ? 'Story video download started' : 'Story photo download started');
-        } catch (err) {
-            console.error('[MaxPland] downloadCurrentStoryMedia error:', err);
-            alert('Error downloading story');
-        }
-    }
-
-    async function downloadCurrentStoryCover() {
-        return downloadCurrentStoryMedia(true);
-    }
-
-    // ponytail: Story toolbar dedicated strictly to Ghost/Stealth Seen blocking
+    // ponytail: Story toolbar: Stealth Seen toggle + Open Raw + Viewers (3 controls)
     // skipped: story media downloads removed per user direction due to unstable Instagram MSE blob stream encryption; add when a non-fragile public media API is available
-    function injectStoryDownloadTools() {
+    function injectStoryBar() {
         if (!location.pathname.startsWith('/stories/')) {
             const existing = document.getElementById('maxpland-story-bar');
             if (existing) existing.remove();
@@ -4228,7 +4159,7 @@
             timer = setTimeout(() => {
                 timer = null;
                 const path = location.pathname;
-                injectStoryDownloadTools();
+                injectStoryBar();
                 if (!path.startsWith('/stories/')) {
                     injectInFeedDownloadButtons();
                     injectProfileAvatarBadge();
@@ -4273,7 +4204,7 @@
         applyCleanFeedMode();
 
         injectInFeedDownloadButtons();
-        injectStoryDownloadTools();
+        injectStoryBar();
         injectProfileAvatarBadge();
         startPageObserver();
         document.addEventListener('click', () => closeAllMenus());

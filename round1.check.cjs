@@ -66,8 +66,8 @@ function harness() {
     vm.runInContext(source.slice(0, source.indexOf(marker)) + `
         globalThis.api = { STATE, IgBridge, MaxPlandVault, runInactiveScan, runRelationshipScan,
             runBatchUnfollow, downloadResolvedMedia, renderRelationshipList, applyUnfollowResult,
-            setFollowStateChip, injectStoryDownloadTools, downloadCurrentStoryMedia, downloadCurrentStoryCover,
-            getActiveStorySection, pickStoryMedia, resolveCurrentStoryMedia, resolveCurrentStoryCover, installStorySeenInterceptor,
+            setFollowStateChip, injectStoryBar,
+            getActiveStorySection, pickStoryMedia, resolveCurrentStoryMedia, installStorySeenInterceptor,
             bindUIEvents, setSleep(fn) { sleep = fn; }, setDownload(fn) { gmDownload = fn; } };
     })();`, context);
     const api = context.api;
@@ -76,6 +76,22 @@ function harness() {
     api.STATE.relationshipAccountId = '1';
     return { ...api, context, document, nodes };
 }
+
+test('Scope gate: removed dead code stays absent from shipped artifacts', () => {
+    const path = require('node:path');
+    const forbidden = ['downloadCurrentStory', 'getActiveStoryUsername', 'resolveCurrentStoryCover',
+        'injectStoryDownloadTools', 'DEFAULT_AVATAR_PATTERNS', 'GM_xmlhttpRequest', 'fbcdn'];
+    const kept = ['resolveCurrentStoryMedia', 'renderViewerPanel', 'fetchStoryViewers', 'injectStoryBar'];
+    const codeFiles = ['src/app_en.js', 'dist/ig_maxpland_en.user.js', 'ig_maxpland_en.user.js'];
+    for (const file of [...codeFiles, 'README.md', 'REFACTOR_PLAN.md']) {
+        const text = fs.readFileSync(path.resolve(__dirname, file), 'utf8');
+        for (const token of forbidden) assert.ok(!text.includes(token), `${file} still contains removed token: ${token}`);
+    }
+    for (const file of codeFiles) {
+        const text = fs.readFileSync(path.resolve(__dirname, file), 'utf8');
+        for (const token of kept) assert.ok(text.includes(token), `${file} lost retained core symbol: ${token}`);
+    }
+});
 
 test('Story uses only native selectors and runs at document-start', () => {
     assert.equal(source.includes('section:visible'), false, 'native querySelector throws on :visible');
@@ -197,7 +213,7 @@ test('Story media resolution falls back to video poster when API unavailable', a
     assert.equal(coverRes.isVideo, false);
 });
 
-test('Story toolbar renders only 1 button (Stealth Mode) and omits download buttons', () => {
+test('Story toolbar renders 3 buttons (Stealth + Open Raw + Viewers) and omits download buttons', () => {
     const h = harness();
     h.context.location.pathname = '/stories/someone/';
     const container = {
@@ -208,7 +224,7 @@ test('Story toolbar renders only 1 button (Stealth Mode) and omits download butt
         querySelectorAll: () => []
     };
     h.document.querySelectorAll = sel => (sel.includes('section') ? [container] : []);
-    h.injectStoryDownloadTools();
+    h.injectStoryBar();
 
     const bar = h.document.getElementById('maxpland-story-bar');
     assert.ok(bar, 'story bar must be injected');
@@ -253,12 +269,9 @@ test('Story actions pick the center/active story, never adjacent side stories', 
         return [];
     };
 
-    // Download Story
-    let downloaded = null;
-    h.setDownload(async (url, name) => { downloaded = { url, name }; return 'ok'; });
-    await h.downloadCurrentStoryMedia();
-    assert.ok(downloaded, 'must trigger download');
-    assert.equal(downloaded.url, 'https://cdn.instagram.com/center_active.mp4', 'must download center active story, not left adjacent');
+    // Story media resolution: center-active beats preloaded adjacent slides
+    const resolved = await h.resolveCurrentStoryMedia();
+    assert.equal(resolved.url, 'https://cdn.instagram.com/center_active.mp4', 'must resolve center active story, not left adjacent');
 });
 
 test('Story media resolution safely resolves 1080p MP4 from React Fiber when video is blob without thread lock', async () => {
@@ -290,15 +303,11 @@ test('Story media resolution safely resolves 1080p MP4 from React Fiber when vid
     };
     h.document.querySelectorAll = sel => (sel.includes('video') ? [blobVideo] : []);
 
-    let downloaded = null;
-    h.setDownload(async (url, name) => { downloaded = { url, name }; return 'ok'; });
-
-    await h.downloadCurrentStoryMedia();
-    assert.ok(downloaded, 'must trigger story download');
-    assert.equal(downloaded.url, 'https://scontent.cdninstagram.com/v/t50/video_1080p.mp4', 'must extract high-res 1080p MP4 from React Fiber');
+    const resolved = await h.resolveCurrentStoryMedia();
+    assert.equal(resolved.url, 'https://scontent.cdninstagram.com/v/t50/video_1080p.mp4', 'must extract high-res 1080p MP4 from React Fiber');
 });
 
-test('Thumbnail download prefers a real cover image over the tiny avatar', async () => {
+test('Thumbnail resolution prefers a real cover image over the tiny avatar', async () => {
     const h = harness();
     h.context.window.innerHeight = 800; h.context.window.innerWidth = 400;
     const bigImg = { currentSrc: 'https://cdn.instagram.com/story_cover.jpg', checkVisibility: () => true,
@@ -308,12 +317,9 @@ test('Thumbnail download prefers a real cover image over the tiny avatar', async
         getAttribute: () => null,
         getBoundingClientRect: () => ({ width: 40, height: 40, top: 10, bottom: 50, left: 10, right: 50 }) };
     h.document.querySelectorAll = sel => (sel.includes('video') ? [] : [avatarImg, bigImg]);
-    let downloaded = null;
-    h.setDownload(async (url, name) => { downloaded = { url, name }; return 'ok'; });
-    await h.downloadCurrentStoryMedia(true);
-    assert.ok(downloaded, 'download must start for a visible story');
-    assert.equal(downloaded.url, 'https://cdn.instagram.com/story_cover.jpg', 'must pick the story cover, not the 50px avatar');
-    assert.match(downloaded.name, /\.jpg$/);
+    const resolved = await h.resolveCurrentStoryMedia(true);
+    assert.equal(resolved.url, 'https://cdn.instagram.com/story_cover.jpg', 'must pick the story cover, not the 50px avatar');
+    assert.equal(resolved.isVideo, false, 'cover resolves as an image');
 });
 
 test('Whitelist blocks request at the action boundary', async () => {

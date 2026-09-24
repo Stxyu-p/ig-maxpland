@@ -63,7 +63,7 @@ IG MaxPland operates under five strict engineering constraints:
   - Strengthened cookie refresh hints for CSRF token expiration during unfollow operations.
   - Network retry mechanism (2× exponential backoff) for media shortcode downloads.
 - **🔒 Reduced Attack Surface:**
-  - Stripped unused `@grant GM_xmlhttpRequest` and `@connect fbcdn.net` permissions from userscript headers.
+  - Stripped unused third-party grant/connect permissions from userscript headers.
 - **🧪 100% Automated Test Coverage:**
   - Modular unit tests (`test/phase1` through `test/phase5`) covering all extracted modules.
   - Zero-regression certification against the 46-invariant test suite (`round1.check.cjs`).

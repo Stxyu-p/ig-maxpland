@@ -153,7 +153,7 @@ downloader.downloadFromArticle(articleElement, options);
 ```
 
 ### 3.2 `DOMInjector` Class
-**Consolidates**: `injectInFeedDownloadButtons`, `injectStoryDownloadTools`, `injectProfileAvatarBadge`, `startPageObserver`
+**Consolidates**: `injectInFeedDownloadButtons`, `injectStoryBar`, `injectProfileAvatarBadge`, `startPageObserver`
 **New file**: `src/features/DOMInjector.js`
 **API**:
 ```js
@@ -191,7 +191,7 @@ injector.destroy(); // cleanup all observers
 **New file**: `src/utils/Utils.js`
 
 ### 4.2 `IGSelectors` Namespace
-**Extracts**: `shortcodeFromArticle`, `getActiveStoryUsername`, `pickStoryMedia`, `extractMediaFromFiber`, `findCenterElement`, `getActiveStorySection`
+**Extracts**: `shortcodeFromArticle`, `pickStoryMedia`, `extractMediaFromFiber`, `findCenterElement`, `getActiveStorySection`
 **New file**: `src/utils/IGSelectors.js`
 
 ### 4.3 `DOMUtils` Namespace
@@ -221,11 +221,10 @@ EventDelegator.on('click', '[data-action="unfollow"]', handler);
 - Event listeners → `AbortController` + `{once: true}` where possible
 
 ### 5.3 Dead Code Removal
-- Remove `downloadCurrentStoryMedia` / `downloadCurrentStoryCover` (marked skipped)
-- Remove `APP_CONFIG.DEFAULT_AVATAR_PATTERNS` (unused)
-- Remove `GM_xmlhttpRequest` grant
-- Remove `@connect fbcdn.net`
-- Remove `STATE.scanIncomplete` flag → state machine
+- [x] Story-download helpers + orphaned story-username resolver removed (descoped, see git history)
+- [x] Avatar-pattern config entry removed — values inlined at the single live read site
+- [x] Unused GM grant/connect lines confirmed absent, locked by the scope gate
+- [ ] `STATE.scanIncomplete` flag → state machine (still live; tests bind it — refactor, not removal)
 
 ---
 
