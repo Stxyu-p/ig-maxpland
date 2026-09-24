@@ -45,8 +45,11 @@
         INSTAGRAM_WEB_APP_ID: '936619743392459',
         FOLLOWING_PAGE_SAFETY_LIMIT: 60,
         FOLLOWERS_PAGE_SAFETY_LIMIT: 250,
-        UNFOLLOW_DELAY_MIN: 4500,
-        UNFOLLOW_DELAY_MAX: 7500,
+        // Sweet spot (2026-09-24, same study as PACE_PRESETS): write actions restrict
+        // accounts far faster than reads — 15-30 s randomized per unfollow replaces
+        // the old 4.5-7.5 s (~500-800 actions/hour was well above safe guidance).
+        UNFOLLOW_DELAY_MIN: 15000,
+        UNFOLLOW_DELAY_MAX: 30000,
         DEFAULT_AVATAR_PATTERNS: [
             '44884218_345707102882519_2446069589734326272_n',
             '464760996_1254146839119862_3605321457742435801_n'

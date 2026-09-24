@@ -599,8 +599,7 @@ test('Batch confirm quotes the configured delay, not stale prose', async () => {
     h.context.confirm = m => { msg = String(m); return false; };
     h.STATE.selectedIds = new Set(['7']);
     await h.runBatchUnfollow();
-    assert.match(msg, /4\.5/, 'must quote UNFOLLOW_DELAY_MIN in seconds');
-    assert.match(msg, /7\.5/, 'must quote UNFOLLOW_DELAY_MAX in seconds');
+    assert.match(msg, /random delay 15-30 seconds per account/, 'must quote the researched unfollow delay window');
     assert.doesNotMatch(msg, /3-5/);
 });
 test('Select checkbox exposes an accessible name', () => {
