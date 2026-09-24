@@ -2,7 +2,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const sourcePath = require('node:path').resolve(__dirname, process.argv[2] || 'ig_maxpland.user.js');
+const sourcePath = require('node:path').resolve(__dirname, process.argv[2] || 'dist/ig_maxpland_en.user.js');
 const source = fs.readFileSync(sourcePath, 'utf8');
 const tests = [];
 function test(name, fn) { tests.push([name, fn]); }

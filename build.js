@@ -1,12 +1,14 @@
 /**
- * IG MaxPland — Modernized Build & Distribution Pipeline (v3.0.0)
- * 
- * Bundles Clean Architecture modules from src/ into production userscripts:
+ * IG MaxPland — Build & Distribution Pipeline (EN-only edition)
+ *
+ * Bundles Clean Architecture modules from src/ into the production userscript:
  * - Reads metadata from package.json
  * - Topological concatenation of modules
- * - Builds both Thai Native (ig_maxpland.user.js) and Global English (ig_maxpland_en.user.js)
+ * - Builds the Global English edition (ig_maxpland_en.user.js)
+ *   ponytail: TH edition removed by owner decision (2026-09-24) — if a Thai
+ *   edition is needed again, restore src/app.js from git history and re-add a
+ *   second buildTarget() call.
  * - Injects userscript header and CSS
- * - Strips dead code & redundant permissions
  * - Outputs to dist/ and synchronizes repository root
  * - Preserves exact invariants required by round1.check.cjs
  */
@@ -17,6 +19,8 @@ const path = require('path');
 const ROOT_DIR = __dirname;
 const PKG_PATH = path.join(ROOT_DIR, 'package.json');
 const DIST_DIR = path.join(ROOT_DIR, 'dist');
+const OUTPUT_FILENAME = 'ig_maxpland_en.user.js';
+const APP_SOURCE_PATH = path.join(ROOT_DIR, 'src', 'app_en.js');
 
 // Topological module concatenation list
 const MODULE_FILES = [
@@ -51,16 +55,10 @@ function getPackageMetadata() {
     return JSON.parse(fs.readFileSync(PKG_PATH, 'utf8'));
 }
 
-function generateUserscriptHeader(pkg, isEn = false) {
-    const desc = isEn
-        ? 'Instagram Relationship Scanner & Clean Media Downloader. Track unfollowers, mutuals, fans, stealth story viewer, clean feed, and full-resolution media downloader (v3.0.0).'
-        : (pkg.description || 'Instagram Relationship Scanner & Comprehensive Media Downloader (Clean Architecture v3.0.0)');
-    const updateUrl = isEn
-        ? 'https://raw.githubusercontent.com/Stxyu-p/ig-maxpland/main/ig_maxpland_en.user.js'
-        : 'https://greasyfork.org/scripts/595787-ig-maxpland/code/ig-maxpland.user.js';
-    const downloadUrl = isEn
-        ? 'https://raw.githubusercontent.com/Stxyu-p/ig-maxpland/main/ig_maxpland_en.user.js'
-        : 'https://greasyfork.org/scripts/595787-ig-maxpland/code/ig-maxpland.user.js';
+function generateUserscriptHeader(pkg) {
+    const desc = pkg.description || 'Instagram Relationship Scanner & Comprehensive Media Downloader (Clean Architecture v3.0.0)';
+    const updateUrl = 'https://raw.githubusercontent.com/Stxyu-p/ig-maxpland/main/ig_maxpland_en.user.js';
+    const downloadUrl = 'https://raw.githubusercontent.com/Stxyu-p/ig-maxpland/main/ig_maxpland_en.user.js';
 
     return `// ==UserScript==
 // @name         IG MaxPland
@@ -78,39 +76,35 @@ function generateUserscriptHeader(pkg, isEn = false) {
 // @connect      instagram.com
 // @connect      cdninstagram.com
 // @run-at       document-start
-// @homepageURL   https://greasyfork.org/th/scripts/595787-ig-maxpland
-// @supportURL    https://greasyfork.org/th/scripts/595787-ig-maxpland/feedback
-// @updateURL     ${updateUrl}
-// @downloadURL   ${downloadUrl}
+// @homepageURL  https://github.com/Stxyu-p/ig-maxpland
+// @supportURL   https://github.com/Stxyu-p/ig-maxpland/issues
+// @updateURL    ${updateUrl}
+// @downloadURL  ${downloadUrl}
 // @license      ${pkg.license || 'MIT'}
 // ==/UserScript==
 `;
 }
 
-function getAppSource(isEn = false, version = '3.0.0') {
-    const appPath = isEn ? path.join(ROOT_DIR, 'src', 'app_en.js') : path.join(ROOT_DIR, 'src', 'app.js');
-    if (!fs.existsSync(appPath)) {
-        throw new Error(`Application source missing: ${appPath}`);
+function getAppSource(version = '3.0.0') {
+    if (!fs.existsSync(APP_SOURCE_PATH)) {
+        throw new Error(`Application source missing: ${APP_SOURCE_PATH}`);
     }
-    let content = fs.readFileSync(appPath, 'utf8');
+    let content = fs.readFileSync(APP_SOURCE_PATH, 'utf8');
     // Ensure footer matches current version
     content = content.replace(/MaxPland v\d+\.\d+\.\d+/g, `MaxPland v${version}`);
     return content;
 }
 
-function buildTarget(isEn = false) {
+function buildTarget() {
     const pkg = getPackageMetadata();
-    const editionName = isEn ? 'Global English (EN)' : 'Thai Native (TH)';
-    const filename = isEn ? 'ig_maxpland_en.user.js' : 'ig_maxpland.user.js';
-    const distPath = path.join(DIST_DIR, filename);
-    const rootPath = path.join(ROOT_DIR, filename);
-
     const startTime = Date.now();
-    const header = generateUserscriptHeader(pkg, isEn);
+    const header = generateUserscriptHeader(pkg);
+    const distPath = path.join(DIST_DIR, OUTPUT_FILENAME);
+    const rootPath = path.join(ROOT_DIR, OUTPUT_FILENAME);
 
     let bundle = header + '\n(() => {\n    \'use strict\';\n\n';
     bundle += '    /* ==========================================================================\n';
-    bundle += `       MODULAR CORE ARCHITECTURE (v3.0.0 Clean Architecture - ${editionName})\n`;
+    bundle += '       MODULAR CORE ARCHITECTURE (v3.0.0 Clean Architecture - Global English)\n';
     bundle += '       ========================================================================== */\n\n';
 
     // 1. Concatenate extracted modules
@@ -126,10 +120,9 @@ function buildTarget(isEn = false) {
 
     // 2. Append application runtime
     bundle += '    /* ==========================================================================\n';
-    bundle += `       APPLICATION RUNTIME & UI GLUE (${editionName})\n`;
+    bundle += '       APPLICATION RUNTIME & UI GLUE (Global English)\n';
     bundle += '       ========================================================================== */\n\n';
-    const appBody = getAppSource(isEn, pkg.version);
-    bundle += appBody;
+    bundle += getAppSource(pkg.version);
 
     // Ensure the bundle ends properly with closing IIFE
     const trimmed = bundle.trimEnd();
@@ -144,22 +137,20 @@ function buildTarget(isEn = false) {
     const elapsed = Date.now() - startTime;
     const stats = fs.statSync(distPath);
     const lineCount = bundle.split('\n').length;
-
-    console.log(`[build:${isEn ? 'en' : 'th'}] Success: ${distPath}`);
-    console.log(`[build:${isEn ? 'en' : 'th'}] Synced:  ${rootPath}`);
-    console.log(`[build:${isEn ? 'en' : 'th'}] Size: ${(stats.size / 1024).toFixed(1)} KB | Lines: ${lineCount} | Time: ${elapsed}ms`);
+    console.log(`[build] Success: ${distPath}`);
+    console.log(`[build] Synced:  ${rootPath}`);
+    console.log(`[build] Size: ${(stats.size / 1024).toFixed(1)} KB | Lines: ${lineCount} | Time: ${elapsed}ms`);
     return { path: distPath, rootPath, size: stats.size, lines: lineCount };
 }
 
 function build() {
-    console.log('[build] Starting IG MaxPland multi-edition build (v3.0.0)...');
+    console.log('[build] Starting IG MaxPland build (EN-only)...');
     if (!fs.existsSync(DIST_DIR)) {
         fs.mkdirSync(DIST_DIR, { recursive: true });
     }
-    const thResult = buildTarget(false);
-    const enResult = buildTarget(true);
-    console.log('[build] Multi-edition build complete.');
-    return { th: thResult, en: enResult };
+    const result = buildTarget();
+    console.log('[build] Build complete.');
+    return { en: result };
 }
 
 // CLI Execution

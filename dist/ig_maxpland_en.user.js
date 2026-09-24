@@ -2,7 +2,7 @@
 // @name         IG MaxPland
 // @namespace    http://tampermonkey.net/
 // @version      3.0.0
-// @description  Instagram Relationship Scanner & Clean Media Downloader. Track unfollowers, mutuals, fans, stealth story viewer, clean feed, and full-resolution media downloader (v3.0.0).
+// @description  Instagram Relationship Scanner & Comprehensive Media Downloader (Clean Architecture v3.0.0)
 // @author       P Choke & SORA
 // @match        https://*.instagram.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=instagram.com
@@ -14,10 +14,10 @@
 // @connect      instagram.com
 // @connect      cdninstagram.com
 // @run-at       document-start
-// @homepageURL   https://greasyfork.org/th/scripts/595787-ig-maxpland
-// @supportURL    https://greasyfork.org/th/scripts/595787-ig-maxpland/feedback
-// @updateURL     https://raw.githubusercontent.com/Stxyu-p/ig-maxpland/main/ig_maxpland_en.user.js
-// @downloadURL   https://raw.githubusercontent.com/Stxyu-p/ig-maxpland/main/ig_maxpland_en.user.js
+// @homepageURL  https://github.com/Stxyu-p/ig-maxpland
+// @supportURL   https://github.com/Stxyu-p/ig-maxpland/issues
+// @updateURL    https://raw.githubusercontent.com/Stxyu-p/ig-maxpland/main/ig_maxpland_en.user.js
+// @downloadURL  https://raw.githubusercontent.com/Stxyu-p/ig-maxpland/main/ig_maxpland_en.user.js
 // @license      MIT
 // ==/UserScript==
 
@@ -25,7 +25,7 @@
     'use strict';
 
     /* ==========================================================================
-       MODULAR CORE ARCHITECTURE (v3.0.0 Clean Architecture - Global English (EN))
+       MODULAR CORE ARCHITECTURE (v3.0.0 Clean Architecture - Global English)
        ========================================================================== */
 
     // ─── Module: src/utils/Utils.js ──────────────────────────────────────
@@ -4458,7 +4458,7 @@ if (typeof module !== 'undefined' && module.exports) {
 
 
     /* ==========================================================================
-       APPLICATION RUNTIME & UI GLUE (Global English (EN))
+       APPLICATION RUNTIME & UI GLUE (Global English)
        ========================================================================== */
 
 

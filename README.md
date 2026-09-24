@@ -7,8 +7,7 @@
 *Clean Architecture · High Speed · Zero-Footprint Privacy · Stealth Anti-Detection*  
 *Pure Vanilla JavaScript · Zero Dependencies · Modular Source & Automated Build Pipeline*
 
-[![Greasy Fork](https://img.shields.io/badge/Greasy%20Fork-Install%20v3.0.0-red?style=for-the-badge&logo=greasyfork&logoColor=white)](https://greasyfork.org/th/scripts/595787-ig-maxpland)
-[![Install Raw](https://img.shields.io/badge/Install-Userscript%20Raw-0284c7?style=for-the-badge&logo=tampermonkey&logoColor=white)](#-one-click-installation)
+[![Install Raw](https://img.shields.io/badge/Install-Userscript%20Raw-0284c7?style=for-the-badge&logo=tampermonkey&logoColor=white)](#-quick-install)
 [![Release](https://img.shields.io/badge/Release-v3.0.0-10b981?style=for-the-badge)](https://github.com/Stxyu-p/ig-maxpland/releases)
 [![License](https://img.shields.io/badge/License-MIT-f59e0b?style=for-the-badge)](LICENSE)
 
@@ -27,9 +26,7 @@
 
 | Channel | Edition | Source | Link |
 | :--- | :--- | :--- | :--- |
-| 🦊 **Greasy Fork** | Official Distribution | Auto-updating | [**👉 Install from Greasy Fork**](https://greasyfork.org/th/scripts/595787-ig-maxpland) |
-| 🇹🇭 **Userscript (TH)** | Thai Native Edition (v3.0.0) | Direct GitHub Raw | [**👉 Install ig_maxpland.user.js**](https://raw.githubusercontent.com/Stxyu-p/ig-maxpland/main/ig_maxpland.user.js) |
-| 🌐 **Userscript (EN)** | Global English Edition | Direct GitHub Raw | [**👉 Install ig_maxpland_en.user.js**](https://raw.githubusercontent.com/Stxyu-p/ig-maxpland/main/ig_maxpland_en.user.js) |
+| 🌐 **Userscript** | Global English Edition (v3.0.0) | Direct GitHub Raw | [**👉 Install ig_maxpland_en.user.js**](https://raw.githubusercontent.com/Stxyu-p/ig-maxpland/main/ig_maxpland_en.user.js) |
 
 *Requires a userscript manager such as [Tampermonkey](https://www.tampermonkey.net/) (recommended) or [Violentmonkey](https://violentmonkey.github.io/).*
 
@@ -58,7 +55,7 @@ IG MaxPland operates under five strict engineering constraints:
   - Leaf authentication (`IgAuth`), isolated transport (`IgTransport`), diffing engine (`IgRelationship`), media processing (`IgMedia`), profile fetching (`IgProfile`), and safe unfollowing (`IgUnfollow`).
 - **📦 Zero-Dependency Build Pipeline (`build.js`):**
   - Deterministic module concatenation in topological dependency order.
-  - Generates distribution bundle at `dist/ig_maxpland.user.js` and synchronizes root `ig_maxpland.user.js`.
+  - Generates distribution bundle at `dist/ig_maxpland_en.user.js` and synchronizes root `ig_maxpland_en.user.js`.
   - Full developer workflow: `npm run build`, `npm run dev` (with `--watch`), and `npm test`.
 - **🛡️ Enhanced Safety Hardening (P0):**
   - Account ID validation hoisted outside of retry loops in `IgBridge.request()`, `downloadResolvedMedia()`, and `runInactiveScan()`.
@@ -250,9 +247,9 @@ ig-maxpland/
 │   │   ├── Utils.js
 │   │   ├── IGSelectors.js
 │   │   └── DOMUtils.js
-│   └── app.js                 # Application runtime & UI glue
+│   └── app_en.js              # Application runtime & UI glue
 ├── dist/
-│   └── ig_maxpland.user.js    # Production bundle (v3.0.0)
+│   └── ig_maxpland_en.user.js # Production bundle (v3.0.0)
 ├── test/                      # Unit check suites (Phase 1 to Phase 5)
 ├── build.js                   # Zero-dependency build pipeline
 ├── round1.check.cjs           # 46-invariant regression test suite
@@ -290,7 +287,3 @@ npm run build
 
 Distributed under the [MIT License](LICENSE).  
 Copyright (c) 2026 P Choke & SORA.
-
-
-
-
