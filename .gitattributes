@@ -1,0 +1,5 @@
+# Shipped userscript is written as uniform CRLF by build.js (header renders
+# correctly in CRLF-strict viewers). Keep the worktree copy CRLF everywhere so
+# the CI drift guard compares like-for-like after a rebuild.
+/ig_maxpland_en.user.js text eol=crlf
+/dist/ig_maxpland_en.user.js text eol=crlf
