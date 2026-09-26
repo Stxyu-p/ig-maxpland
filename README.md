@@ -1,18 +1,18 @@
 <div align="center">
 
-# ⚡ IG MaxPland <sub>v3.0.0</sub>
+# ⚡ IG MaxPland <sub>v3.0.1</sub>
 
 **Enterprise-Grade Relationship Intelligence & Precision Media Downloader for Instagram Web**
 
 *High Speed · Zero-Footprint Privacy · Stealth Anti-Detection*  
-*Pure Vanilla JavaScript · Zero Dependencies · Modular Source & Automated Build Pipeline*
+*Pure Vanilla JavaScript · Zero Dependencies · Single-Source Build Pipeline*
 
 [![Install Raw](https://img.shields.io/badge/Install-Userscript%20Raw-0284c7?style=for-the-badge&logo=tampermonkey&logoColor=white)](#-quick-install)
-[![Release](https://img.shields.io/badge/Release-v3.0.0-10b981?style=for-the-badge)](https://github.com/Stxyu-p/ig-maxpland/releases)
+[![Release](https://img.shields.io/badge/Release-v3.0.1-10b981?style=for-the-badge)](https://github.com/Stxyu-p/ig-maxpland/releases)
 [![License](https://img.shields.io/badge/License-MIT-f59e0b?style=for-the-badge)](LICENSE)
 
 ![Dependencies](https://img.shields.io/badge/Dependencies-Zero-success?style=flat-square)
-![Architecture](https://img.shields.io/badge/Architecture-Clean%20Modular%20v3.0-blueviolet?style=flat-square)
+![Architecture](https://img.shields.io/badge/Architecture-Single--Source%20Runtime-blueviolet?style=flat-square)
 ![Engine](https://img.shields.io/badge/Engine-Vanilla%20JS-cyan?style=flat-square)
 ![Storage](https://img.shields.io/badge/Storage-IndexedDB%20Vault-blue?style=flat-square)
 ![Anti-Detection](https://img.shields.io/badge/Anti--Detection-Native%20Masking%20%2B%20Jitter-purple?style=flat-square)
@@ -26,7 +26,8 @@
 
 | Channel | Edition | Source | Link |
 | :--- | :--- | :--- | :--- |
-| 🌐 **Userscript** | Global English Edition (v3.0.0) | Direct GitHub Raw | [**👉 Install ig_maxpland_en.user.js**](https://raw.githubusercontent.com/Stxyu-p/ig-maxpland/main/ig_maxpland_en.user.js) |
+| 🌐 **Userscript** | Global English Edition (v3.0.1) | Greasy Fork | [**👉 Install IG MaxPland**](https://greasyfork.org/en/scripts/595787-ig-maxpland) |
+| 📦 **Direct** | Global English Edition (v3.0.1) | GitHub Raw | [**👉 Install ig_maxpland_en.user.js**](https://raw.githubusercontent.com/Stxyu-p/ig-maxpland/main/ig_maxpland_en.user.js) |
 
 *Requires a userscript manager such as [Tampermonkey](https://www.tampermonkey.net/) (recommended) or [Violentmonkey](https://violentmonkey.github.io/).*
 
@@ -76,7 +77,7 @@ IG MaxPland operates under five strict engineering constraints:
 | **Inactive Account Radar** | ❌ None | ❌ None | ✅ **Safe 20/batch Deep Post Timestamps** |
 | **Account Health Dashboard** | ❌ None | ⚠️ Paid cloud subscription | ✅ **Local Snapshot Diff & SVG Sparklines** |
 | **Unfollow Protection** | ❌ None | ❌ None | ✅ **Starred Whitelist + JSON Portability** |
-| **Anti-Detection Pacing** | ❌ Fixed rapid spam (high ban risk) | ❌ Automated loop | ✅ **4,500–7,500ms Randomized Jitter** |
+| **Anti-Detection Pacing** | ❌ Fixed rapid spam (high ban risk) | ❌ Automated loop | ✅ **Randomized 15–30 s writes, two-tier rate limiting** |
 | **In-Feed Media Downloader** | ⚠️ Watermarked or downscaled | ⚠️ Heavy memory-leaking ZIPs | ✅ **Direct 1-Click Stream to Disk** |
 | **External Dependencies** | ❌ jQuery, Lodash, external CDNs | ❌ Multi-megabyte bundles | ✅ **Zero Dependencies (Pure Vanilla JS)** |
 
@@ -162,8 +163,9 @@ Comprehensive audit of reciprocal relationships with defensive unfollowing prote
 
 #### 🛡️ Unfollow Safety Safeguards
 - **Starred Whitelist (⭐):** Lock friends or creators to permanently prevent accidental unfollows across all interfaces.
-- **Humanized Jitter Pacing:** Enforces randomized 4,500–7,500ms intervals between calls with visible countdown.
+- **Humanized Jitter Pacing:** Randomized 15–30 s between every unfollow, batch or row-by-row, with a visible refusal message when you click too soon.
 - **Server Confirmation Enforcement:** Unfollow actions are committed only after verified HTTP 200 responses; ambiguous failures immediately abort the queue.
+- **Two-Tier Rate Limiting:** Ordinary 429s cool down for 10 minutes and resume automatically. Only a real Instagram block (`feedback_required` / `sentry_block`) latches a 6-hour hold that survives a page refresh and is cleared from Settings.
 - **JSON Portability:** Export and import your whitelist configuration across browsers and machines.
 
 ---
@@ -207,27 +209,32 @@ Stream high-resolution assets directly to disk without quality degradation.
 Meta deploys machine-learning anomaly detectors on Instagram Web to flag automated bot activity. IG MaxPland operates strictly within human behavioral envelopes:
 
 1. **Bounded Batch Ceiling:** Profile queries are hard-capped at **20 fresh profiles per batch**. Subsequent lookups require explicit user action, preventing runaway requests.
-2. **Randomized Jitter Interval:** Delays are calculated with dynamic human-like jitter rather than mechanical intervals:
-   $$\Delta t = \text{base} + \text{random}(0, 3000\text{ms}) \quad (\text{where } \text{base} = 4,500\text{ms})$$
-   This distributes calls between **4.5s and 7.5s**, blending seamlessly into natural scrolling cadence.
+2. **Randomized Jitter Interval:** Every request waits a randomized interval, never a fixed one:
+
+   | Action | Delay |
+   | :--- | :--- |
+   | Relationship scan (Safe) | 6–12 s per page + 60–120 s rest every 30 pages |
+   | Relationship scan (Balanced / Fast) | 3–6 s / 1.5–3 s per page, with confirmations |
+   | Unfollow (batch **and** row-by-row) | **15–30 s** |
+   | Inactive radar | 3.5–6 s |
+   | Media queue | 1.8–3 s |
+
 3. **Session-Native Header Parity:** Sends genuine browser headers (`X-ASBD-ID`, dynamic `X-IG-WWW-Claim`) extracted directly from the user's active session, leaving zero third-party bot signatures.
+4. **Two-Tier Rate Limiting:** An ordinary 429 costs a 10-minute cooldown and resumes on its own. A genuine Instagram block costs a 6-hour hold that survives a refresh — deliberately not auto-expiring, so a stray retry cannot restart the cycle.
 
 ---
 
 ## 🏗️ Project Structure
 
-```
-ig-maxpland/
-├── src/
-│   └── app_en.js              # The entire runtime: IgBridge, features, UI
-├── dist/
-│   └── ig_maxpland_en.user.js # Production bundle (built from src/app_en.js)
-├── test/
-│   └── fixture/               # Local API fixture used for browser testing
-├── build.js                   # Zero-dependency build pipeline (header + src)
-├── round1.check.cjs           # 51-invariant regression suite, run against dist
-└── package.json
-```
+| Path | Purpose |
+| :--- | :--- |
+| `src/app_en.js` | The entire runtime — IgBridge, features, UI |
+| `dist/ig_maxpland_en.user.js` | Production bundle, built from `src/app_en.js` |
+| `ig_maxpland_en.user.js` | Root copy of the bundle (userscript install target) |
+| `test/fixture/` | Local API fixture used for browser testing |
+| `build.js` | Zero-dependency build pipeline (header + src) |
+| `round1.check.cjs` | 51-invariant regression suite, run against `dist` |
+| `package.json` | Version and scripts |
 
 ---
 
