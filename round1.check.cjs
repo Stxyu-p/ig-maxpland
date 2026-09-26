@@ -13,7 +13,8 @@ function harness() {
             tagName: tagName.toUpperCase(),
             style: {}, textContent: '', innerHTML: '', disabled: false,
             children: [],
-            classList: { add() {}, remove() {}, toggle() {} }, click() {}, addEventListener() {},
+            classList: { add() {}, remove() {}, toggle() {} }, click() {},
+            addEventListener(type, fn) { (this.__click ||= {})[type] ||= []; this.__click[type].push(fn); },
             setAttribute() {},
             append(...ch) { this.children.push(...ch); },
             appendChild(ch) { this.children.push(ch); return ch; },
@@ -33,8 +34,11 @@ function harness() {
         });
     };
     const bodyEl = element('body');
+    const docListeners = {}; // the row/batch actions live on one delegated document click listener
     const document = { cookie: 'ds_user_id=1; csrftoken=test',
         body: bodyEl,
+        addEventListener(type, fn) { (docListeners[type] ||= []).push(fn); },
+        dispatch(type, event) { return Promise.all((docListeners[type] || []).map(fn => fn(event))); },
         getElementById(id) {
             if (nodes.has(id)) return nodes.get(id);
             if (id === 'maxpland-story-bar' || id === 'maxpland-profile-avatar-btn') return null;
@@ -55,9 +59,16 @@ function harness() {
         navigator: { sendBeacon: (url) => false },
         innerHeight: 800, innerWidth: 400
     };
+    const timers = [];
     const context = vm.createContext({ document, console, URL, URLSearchParams, AbortController, DOMException, Response,
-        setTimeout(fn) { try { fn && fn(); } catch (_) {} return 1; }, clearTimeout() {}, setInterval() { return 1; }, clearInterval() {},
-        localStorage: { getItem() { return null; }, setItem() {} }, performance,
+        setTimeout(fn, ms) { // real pending: a 30s request timeout must NOT fire instantly,
+            if (ms >= 1000) { timers.push(fn); return timers.length; } // which faked a TIMEOUT on every request
+            try { fn && fn(); } catch (_) {} return 1; }, clearTimeout() {}, setInterval() { return 1; }, clearInterval() {},
+        localStorage: (() => { // Map-backed: the hard-block latch must be assertable
+            const m = new Map();
+            return { getItem: k => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)),
+                removeItem: k => m.delete(k), clear: () => m.clear() };
+        })(), performance,
         window: win, unsafeWindow: win, location: { pathname: '/', href: 'https://www.instagram.com/' },
         alert() {}, confirm() { return true; } });
     const marker = "    if (document.readyState === 'complete' || document.readyState === 'interactive') {";
@@ -74,7 +85,7 @@ function harness() {
     api.setSleep(async () => {});
     api.IgBridge.assertAccount = id => assert.equal(String(id), '1');
     api.STATE.relationshipAccountId = '1';
-    return { ...api, context, document, nodes };
+    return { ...api, context, document, nodes, dispatch: (t, e) => document.dispatch(t, e) };
 }
 
 test('Scope gate: removed dead code stays absent from shipped artifacts', () => {
@@ -593,6 +604,96 @@ test('Carousel history keys use the media id, and dedupe still skips on rerun', 
     assert.deepEqual([...store.keys()].sort(), ['abc:100:media', 'abc:200:media']);
     const second = await h.downloadResolvedMedia(resolved, { allCarousel: true, skipExisting: true });
     assert.deepEqual([...second.map(r => r.status)], ['skipped', 'skipped']);
+});
+
+function rateLimitHarness(respond) {
+    const h = harness();
+    h.context.localStorage.clear();
+    h.IgBridge.hardBlockAccount = null;
+    h.IgBridge.hardBlockAt = 0;
+    h.IgBridge.cooldownUntil = 0;
+    h.IgBridge.cooldownAccount = null;
+    h.context.window.fetch = async () => respond();
+    h.context.showToast = () => {};
+    return h;
+}
+const softLimitResponse = () => ({
+    status: 429, url: 'https://www.instagram.com/api/v1/friendships/2/following/',
+    headers: { get: () => null },
+    text: async () => JSON.stringify({ message: 'Please wait a few minutes before you try again.', error_type: 'rate_limit_error' })
+});
+const hardLimitResponse = () => ({
+    status: 429, url: 'https://www.instagram.com/api/v1/friendships/2/following/',
+    headers: { get: () => null },
+    text: async () => JSON.stringify({ message: 'feedback_required' })
+});
+
+test('A plain 429 rate_limit_error stays on the SOFT tier and never latches the hard block', async () => {
+    const h = rateLimitHarness(softLimitResponse);
+    const err = await h.IgBridge.request('/api/v1/friendships/2/following/').then(() => null, e => e);
+    assert.equal(err?.code, 'RATE_LIMIT', 'must surface as a retriable rate limit');
+    assert.equal(h.IgBridge.hardBlockAccount, null, 'a 10-minute nuisance must not become a 6h lockout');
+    assert.equal(h.context.localStorage.getItem('maxpland_hard_block'), null, 'nothing may persist to storage');
+    // The soft brake must actually hold: a follow-up request is refused without hitting the network.
+    let reached = 0;
+    h.context.window.fetch = async () => { reached++; return softLimitResponse(); };
+    const second = await h.IgBridge.request('/api/v1/friendships/2/following/').then(() => null, e => e);
+    assert.equal(second?.code, 'RATE_LIMIT');
+    assert.equal(reached, 0, 'cooldown must refuse before the network');
+    assert.ok(h.IgBridge.cooldownUntil - Date.now() > 9 * 60 * 1000, 'floor is 10 minutes, not 60s');
+});
+test('feedback_required latches the hard block, survives reload, and is clearable from Settings', async () => {
+    const h = rateLimitHarness(hardLimitResponse);
+    const err = await h.IgBridge.request('/api/v1/friendships/2/following/').then(() => null, e => e);
+    assert.equal(err?.code, 'BLOCKED');
+    assert.equal(h.IgBridge.hardBlockAccount, '1', 'latched in memory');
+    const saved = JSON.parse(h.context.localStorage.getItem('maxpland_hard_block'));
+    assert.equal(String(saved.account), '1', 'latched to storage so a refresh cannot escape it');
+    // Reload: a fresh runtime restores the latch from storage and refuses every request.
+    const reloaded = rateLimitHarness(softLimitResponse);
+    reloaded.context.localStorage.setItem('maxpland_hard_block', JSON.stringify(saved));
+    reloaded.IgBridge.restoreHardBlock();
+    let reached = 0;
+    reloaded.context.window.fetch = async () => { reached++; return softLimitResponse(); };
+    const afterReload = await reloaded.IgBridge.request('/api/v1/friendships/2/following/').then(() => null, e => e);
+    assert.equal(afterReload?.code, 'BLOCKED', 'a reload must not reset the block');
+    assert.equal(reached, 0, 'and must not reach the network');
+    // Settings -> Clear Block is the only exit.
+    reloaded.context.window.fetch = async () => ({ ok: true, status: 200, url: '', headers: { get: () => null },
+        text: async () => JSON.stringify({ status: 'ok' }) });
+    reloaded.IgBridge.clearHardBlock();
+    assert.equal(reloaded.IgBridge.hardBlockAccount, null);
+    assert.equal(reloaded.context.localStorage.getItem('maxpland_hard_block'), null);
+    await assert.doesNotReject(reloaded.IgBridge.request('/api/v1/friendships/2/following/'));
+});
+test('Row-by-row unfollow is paced; the row path cannot outrun the batch path', async () => {
+    const h = harness();
+    let writes = 0;
+    h.IgBridge.unfollowUser = async () => { writes++; };
+    h.bindUIEvents(h.document.getElementById('trigger'), h.document.getElementById('overlay'), h.document.getElementById('modal'));
+    // A fresh button per click: the real row is re-rendered after each unfollow, so a
+    // reused button would keep the disabled=true the handler set and fake a pass.
+    const rowClick = async () => {
+        const btn = { dataset: { id: '2', user: 'a' }, disabled: false, textContent: '', innerHTML: '',
+            closest: sel => (sel === '.maxpland-row-unfollow-btn' ? btn : null) };
+        for (const fn of (h.nodes.get('maxpland-relationship-list').__click || {}).click || []) await fn({ target: btn });
+        return String(h.document.getElementById('maxpland-toast').textContent);
+    };
+
+    // A write landed one second ago: the next row click must be refused, not sent.
+    h.STATE.lastUnfollowAt = Date.now() - 1000;
+    assert.match(await rowClick(), /Safety pacing/i, 'a row click inside the window must be refused with a reason');
+    assert.equal(writes, 0, 'no write may escape the pacing guard');
+
+    // Outside the window the row path runs, and it stamps the shared clock for the next one.
+    h.STATE.lastUnfollowAt = 0;
+    await rowClick();
+    assert.equal(writes, 1);
+    assert.ok(h.STATE.lastUnfollowAt > 0, 'a successful row unfollow must stamp the shared clock');
+
+    // Immediately after, a second row click is refused again — the guard is stateful, not cosmetic.
+    assert.match(await rowClick(), /Safety pacing/i, 'the second rapid click must be refused too');
+    assert.equal(writes, 1, 'and must not write');
 });
 
 test('Footer version matches the script header', () => {
