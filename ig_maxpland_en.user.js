@@ -50,12 +50,6 @@
         // the old 4.5-7.5 s (~500-800 actions/hour was well above safe guidance).
         UNFOLLOW_DELAY_MIN: 15000,
         UNFOLLOW_DELAY_MAX: 30000,
-        // Write ceiling. The 15-30s delay is an interval, not a budget: sustained it
-        // still permits 120-240 unfollows per hour of continuous running, above every
-        // reported safe daily band. These caps are deliberately at the conservative end
-        // because the published figures are anecdotal and mutually inconsistent.
-        UNFOLLOW_SESSION_CAP: 80,
-        UNFOLLOW_DAILY_CAP: 200,
     };
     const HARD_BLOCK_KEY = 'maxpland_hard_block';
     const WRITE_BUDGET_KEY = 'maxpland_write_budget';
@@ -1354,35 +1348,27 @@
         } catch (_) {}
     }
 
-    // ponytail: one localStorage read, not a watch. Counts unfollows per day and per
-    // browser session; checked BEFORE each write so a retry cannot slip past it.
-    // Reset button lives in Settings. Escalate to a server-side counter when the
-    // user runs multiple tabs (localStorage is per-origin, not per-tab).
+    // ponytail: display-only counter. There is deliberately no cap here — the 15-30s
+    // randomized delay is the actual safety control, and a per-day ceiling would only
+    // force a 1,200-account cleanup into a multi-day wait without reducing request
+    // rate. Remove when the user asks for a ceiling again.
     function getWriteBudget() {
         const day = new Date().toISOString().slice(0, 10);
         let saved = null;
         try { saved = JSON.parse(localStorage.getItem(WRITE_BUDGET_KEY)); } catch (_) {}
-        if (!saved || saved.day !== day) saved = { day, daily: 0, session: 0 };
+        if (!saved || saved.day !== day) saved = { day, daily: 0 };
         return saved;
     }
-    function consumeWriteBudget() {
+    function noteWrite() {
         const b = getWriteBudget();
-        if (b.daily >= APP_CONFIG.UNFOLLOW_DAILY_CAP) {
-            return { ok: false, reason: `daily`, used: b.daily, cap: APP_CONFIG.UNFOLLOW_DAILY_CAP };
-        }
-        if (b.session >= APP_CONFIG.UNFOLLOW_SESSION_CAP) {
-            return { ok: false, reason: 'session', used: b.session, cap: APP_CONFIG.UNFOLLOW_SESSION_CAP };
-        }
-        b.daily++; b.session++;
+        b.daily++;
         try { localStorage.setItem(WRITE_BUDGET_KEY, JSON.stringify(b)); } catch (_) {}
-        return { ok: true, used: b.daily, cap: APP_CONFIG.UNFOLLOW_DAILY_CAP };
     }
     function resetWriteBudget() {
         try { localStorage.removeItem(WRITE_BUDGET_KEY); } catch (_) {}
     }
     function formatBudget() {
-        const b = getWriteBudget();
-        return `${b.session}/${APP_CONFIG.UNFOLLOW_SESSION_CAP} this session · ${b.daily}/${APP_CONFIG.UNFOLLOW_DAILY_CAP} today`;
+        return `${getWriteBudget().daily.toLocaleString()} unfollowed today`;
     }
 
     const STATE = {
@@ -1403,6 +1389,7 @@
         stopScanFlag: false,
         isUnfollowing: false,
         stopUnfollowFlag: false,
+        lastUnfollowAt: 0,
         activeTab: 'relationship',
         relationshipFilter: 'not_following_back',
         searchQuery: '',
@@ -2138,10 +2125,10 @@
                         </div>
                         <div class="maxpland-settings-row">
                             <div>
-                                <div style="font-weight:600;font-size:13px;">Unfollow Write Budget</div>
+                                <div style="font-weight:600;font-size:13px;">Unfollow Activity</div>
                                 <div style="font-size:11.5px;color:var(--mp-text-muted);" id="maxpland-budget-label">${formatBudget()}</div>
                             </div>
-                            <button type="button" class="maxpland-btn-secondary" id="setting-btn-reset-budget" style="padding:5px 10px;font-size:12px;">Reset Counters</button>
+                            <button type="button" class="maxpland-btn-secondary" id="setting-btn-reset-budget" style="padding:5px 10px;font-size:12px;">Reset Counter</button>
                         </div>
                     </div>
                 </div>
@@ -2527,10 +2514,10 @@
         }
         if (btnResetBudget) {
             btnResetBudget.addEventListener('click', () => {
-                if (!confirm('Reset the unfollow counters to zero?\n\nOnly do this if you are certain the earlier count was wrong. The cap exists to limit total write volume per day.')) return;
+                if (!confirm('Reset the "unfollowed today" counter to zero?')) return;
                 resetWriteBudget();
                 if (budgetLabel) budgetLabel.textContent = formatBudget();
-                showToast('Unfollow counters reset to 0.');
+                showToast('Unfollow counter reset to 0.');
             });
         }
         if (btnClearCache) {
@@ -2589,6 +2576,16 @@
                 const btn = e.target.closest('.maxpland-row-unfollow-btn');
                 if (btn && !btn.disabled) {
                     if (STATE.isScanning || STATE.isUnfollowing || STATE.isScanningInactive || STATE.scanIncomplete) return;
+                    // Measured leak: the row button had no pacing at all, so a user
+                    // clicking row-by-row fired 5 writes in 472ms (91ms apart) while the
+                    // batch path waits 15-30s between the same writes. Same delay, enforced
+                    // here too, so the two paths cannot disagree about the write rate.
+                    const since = Date.now() - (STATE.lastUnfollowAt || 0);
+                    const wait = APP_CONFIG.UNFOLLOW_DELAY_MAX - since;
+                    if (wait > 0) {
+                        showToast(`⏳ Safety pacing: wait ${Math.ceil(wait / 1000)}s before the next unfollow`, 4000);
+                        return;
+                    }
                     const uid = btn.dataset.id;
                     const uname = btn.dataset.user;
                     if (!confirm(`Are you sure you want to unfollow @${uname}?`)) return;
@@ -2598,6 +2595,8 @@
                     btn.textContent = 'Unfollowing...';
                     try {
                         await IgBridge.unfollowUser(uid);
+                        STATE.lastUnfollowAt = Date.now();
+                        noteWrite();
                         showToast(`Unfollowed @${uname} successfully`);
                         applyUnfollowResult(uid, uname);
                         STATE.selectedIds.delete(uid);
@@ -3132,13 +3131,8 @@
         }
 
         const estSeconds = Math.round(count * ((APP_CONFIG.UNFOLLOW_DELAY_MIN + APP_CONFIG.UNFOLLOW_DELAY_MAX) / 2000));
-        const budget = getWriteBudget();
-        const proceed = confirm(`⚠️ Safety warning:\nYou are about to unfollow ${count} accounts\nEstimated duration: ${Math.ceil(estSeconds / 60)} minutes (random delay ${APP_CONFIG.UNFOLLOW_DELAY_MIN / 1000}-${APP_CONFIG.UNFOLLOW_DELAY_MAX / 1000} seconds per account)\nWrite budget: ${formatBudget()}\n\nStart now?`);
+        const proceed = confirm(`⚠️ Safety warning:\nYou are about to unfollow ${count} accounts\nEstimated duration: ${Math.ceil(estSeconds / 60)} minutes (random delay ${APP_CONFIG.UNFOLLOW_DELAY_MIN / 1000}-${APP_CONFIG.UNFOLLOW_DELAY_MAX / 1000} seconds per account)\nToday so far: ${formatBudget()}\n\nStart now?`);
         if (!proceed) return;
-        if (budget.daily + count > APP_CONFIG.UNFOLLOW_DAILY_CAP) {
-            alert(`This batch (${count}) would exceed today's unfollow cap of ${APP_CONFIG.UNFOLLOW_DAILY_CAP}.\n\nUsed: ${formatBudget()}\n\nUnfollow fewer accounts, or wait until tomorrow. You can reset the counter in Settings if you are certain.`);
-            return;
-        }
 
         STATE.isUnfollowing = true;
         STATE.stopUnfollowFlag = false;
@@ -3170,17 +3164,6 @@
                 const userObj = STATE.notFollowingBack.find(u => String(u.id || u.pk_id || u.pk || '') === uid)
                     || STATE.following.find(u => String(u.id || u.pk_id || u.pk || '') === uid);
                 if (isProtectedUser(uid, userObj?.username)) { STATE.selectedIds.delete(uid); continue; }
-                // Checked before the request, not after: a batch that runs past the cap
-                // stops with a clear message instead of silently overshooting.
-                const budget = consumeWriteBudget();
-                if (!budget.ok) {
-                    STATE.stopUnfollowFlag = true;
-                    phaseEl.textContent = `Stopped at the ${budget.reason} unfollow cap (${budget.used}/${budget.cap})`;
-                    noticeEl.textContent = `Safety cap reached. ${formatBudget()}. Reset the counter in Settings if you are certain.`;
-                    noticeEl.style.display = 'block';
-                    showToast(`⏸️ Unfollow stopped at the ${budget.reason} cap`, 6000);
-                    break;
-                }
                 const uname = userObj ? `@${userObj.username}` : `UID ${uid}`;
 
                 phaseEl.textContent = `Unfollowing [${i + 1}/${idsToUnfollow.length}]: ${uname}`;
@@ -3191,6 +3174,8 @@
                 try {
                     await IgBridge.unfollowUser(uid);
                     successCount++;
+                    STATE.lastUnfollowAt = Date.now();
+                    noteWrite();
                     STATE.selectedIds.delete(uid);
                     applyUnfollowResult(uid, userObj?.username);
                 } catch (err) {
