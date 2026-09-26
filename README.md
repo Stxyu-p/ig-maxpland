@@ -4,7 +4,7 @@
 
 **Enterprise-Grade Relationship Intelligence & Precision Media Downloader for Instagram Web**
 
-*Clean Architecture · High Speed · Zero-Footprint Privacy · Stealth Anti-Detection*  
+*High Speed · Zero-Footprint Privacy · Stealth Anti-Detection*  
 *Pure Vanilla JavaScript · Zero Dependencies · Modular Source & Automated Build Pipeline*
 
 [![Install Raw](https://img.shields.io/badge/Install-Userscript%20Raw-0284c7?style=for-the-badge&logo=tampermonkey&logoColor=white)](#-quick-install)
@@ -48,25 +48,20 @@ IG MaxPland operates under five strict engineering constraints:
 
 ---
 
-## 🆕 What's New in v3.0.0 (Clean Architecture)
+## 🆕 What's New in v3.0.1
 
-- **🏗️ Full Clean Architecture Modularization:**
-  - Transitioned the codebase into 18 decoupled, single-responsibility modules across `src/modules/`, `src/core/`, `src/features/`, `src/ui/`, and `src/utils/`.
-  - Leaf authentication (`IgAuth`), isolated transport (`IgTransport`), diffing engine (`IgRelationship`), media processing (`IgMedia`), profile fetching (`IgProfile`), and safe unfollowing (`IgUnfollow`).
+- **🗑️ Removed 190 KB of dead code:** the 17 extracted modules under `src/modules/`, `src/core/`, `src/features/`, `src/ui/`, and `src/utils/` were never referenced by the shipped runtime. They and their `test/phase1`–`test/phase5` suites are deleted; the bundle is now header + `src/app_en.js` only.
+- **🧪 Tests that test what ships:** `npm test` runs `round1.check.cjs` against the production bundle — 51 invariants, including the soft/hard rate-limit tiers, the persistent hard block, and the row-unfollow pacing guard.
+- **🛡️ Safety fixes (v3.0.1):**
+  - A plain HTTP 429 with `error_type: rate_limit_error` stays on the **soft** tier (10-minute cooldown, auto-retriable). Only `feedback_required` / `sentry_block` latch the 6-hour hard block. Previously an ordinary rate limit latched a lockout only Settings could clear.
+  - The hard block persists to `localStorage`, so refreshing the page cannot escape it. `Settings → Clear Block` is the only exit, behind a confirmation.
+  - Row-by-row unfollow is paced with the same 15–30 s randomized delay as batch unfollow. It previously had no pacing at all — measured at 91 ms between writes, ~200× faster than the batch path.
+  - Unfollow uses a single proven route. The ambiguous-write ladder was removed.
+  - A soft limit reports `Paused · rate limit` instead of `Scan failed`, matching the notice beside it.
+  - Relationship search no longer rebuilds a followed-ID set on every keystroke (measured 67.9 ms → 1.6 ms per keystroke).
 - **📦 Zero-Dependency Build Pipeline (`build.js`):**
-  - Deterministic module concatenation in topological dependency order.
-  - Generates distribution bundle at `dist/ig_maxpland_en.user.js` and synchronizes root `ig_maxpland_en.user.js`.
-  - Full developer workflow: `npm run build`, `npm run dev` (with `--watch`), and `npm test`.
-- **🛡️ Enhanced Safety Hardening (P0):**
-  - Account ID validation hoisted outside of retry loops in `IgBridge.request()`, `downloadResolvedMedia()`, and `runInactiveScan()`.
-  - Automatic snapshot migration fallback for pre-v6 historical lost-followers records.
-  - Strengthened cookie refresh hints for CSRF token expiration during unfollow operations.
-  - Network retry mechanism (2× exponential backoff) for media shortcode downloads.
-- **🔒 Reduced Attack Surface:**
-  - Stripped unused third-party grant/connect permissions from userscript headers.
-- **🧪 100% Automated Test Coverage:**
-  - Modular unit tests (`test/phase1` through `test/phase5`) covering all extracted modules.
-  - Zero-regression certification against the 46-invariant test suite (`round1.check.cjs`).
+  - Generates `dist/ig_maxpland_en.user.js` and syncs the root `ig_maxpland_en.user.js`.
+  - `npm run build`, `npm run dev` (with `--watch`), and `npm test`.
 
 ---
 
@@ -219,40 +214,18 @@ Meta deploys machine-learning anomaly detectors on Instagram Web to flag automat
 
 ---
 
-## 🏗️ Clean Architecture & Project Structure
+## 🏗️ Project Structure
 
 ```
 ig-maxpland/
 ├── src/
-│   ├── core/                  # State management & faceted filter engine
-│   │   ├── StateManager.js
-│   │   └── FilterEngine.js
-│   ├── modules/               # Domain API & Relationship modules
-│   │   ├── IgAuth.js          # Leaf authentication & session handling
-│   │   ├── IgTransport.js     # Rate-limited HTTP transport
-│   │   ├── IgRelationship.js  # Diffing & ghost detection
-│   │   ├── IgMedia.js         # Media resolution & download helpers
-│   │   ├── IgProfile.js       # Profile HD & activity fetching
-│   │   └── IgUnfollow.js      # Defensive unfollowing execution
-│   ├── features/              # User-facing standalone features
-│   │   ├── MediaDownloader.js # In-feed & carousel downloader
-│   │   ├── DOMInjector.js     # Action bars, avatar badges & observers
-│   │   ├── StoryStealth.js    # Multi-channel seen interceptor
-│   │   └── CleanFeed.js       # Non-collapsing feed cleaner
-│   ├── ui/                    # UI engines & event systems
-│   │   ├── EventDelegator.js  # Root event delegation
-│   │   ├── ProgressController.js
-│   │   └── TemplateEngine.js  # Safe XSS template interpolation
-│   ├── utils/                 # Pure utility & DOM selector helpers
-│   │   ├── Utils.js
-│   │   ├── IGSelectors.js
-│   │   └── DOMUtils.js
-│   └── app_en.js              # Application runtime & UI glue
+│   └── app_en.js              # The entire runtime: IgBridge, features, UI
 ├── dist/
-│   └── ig_maxpland_en.user.js # Production bundle (v3.0.0)
-├── test/                      # Unit check suites (Phase 1 to Phase 5)
-├── build.js                   # Zero-dependency build pipeline
-├── round1.check.cjs           # 46-invariant regression test suite
+│   └── ig_maxpland_en.user.js # Production bundle (built from src/app_en.js)
+├── test/
+│   └── fixture/               # Local API fixture used for browser testing
+├── build.js                   # Zero-dependency build pipeline (header + src)
+├── round1.check.cjs           # 51-invariant regression suite, run against dist
 └── package.json
 ```
 
@@ -263,13 +236,10 @@ ig-maxpland/
 All tests run in an isolated Node.js test harness without external test runner dependencies:
 
 ```bash
-# Run complete test suite (modules + production bundle)
+# Run the invariant suite against the production bundle
 npm test
 
-# Run modular unit tests only
-npm run test:modules
-
-# Run full 46-invariant regression check on bundle
+# Run the invariant suite on the bundle
 npm run test:bundle
 
 # Development mode (watch and rebuild on file change)
@@ -279,7 +249,7 @@ npm run dev
 npm run build
 ```
 
-**Verification Status:** **100% Pass** across all 5 modular test suites and **46/46 invariant checks passing** on the production bundle.
+**Verification Status:** **51/51 invariant checks passing** on the production bundle. The suite runs against `dist/ig_maxpland_en.user.js` — the same bytes users install.
 
 ---
 

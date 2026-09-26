@@ -22,13 +22,11 @@ const DIST_DIR = path.join(ROOT_DIR, 'dist');
 const OUTPUT_FILENAME = 'ig_maxpland_en.user.js';
 const APP_SOURCE_PATH = path.join(ROOT_DIR, 'src', 'app_en.js');
 
-// ponytail: bundle list is empty as of 2026-09-24 — the EN runtime (src/app_en.js)
-// implements every flow itself (IgBridge + inline features; only guarded
-// IgRelationship.hasNoAvatar is consulted and it has a local fallback), so the
-// 17 extracted modules were 190 KB of dead weight parsed at document-start.
-// Module files stay in src/ and phase1-5 tests exercise them directly.
-// To re-integrate: list a module here once the app actually calls it.
-const MODULE_FILES = [];
+// ponytail: no module concatenation. The runtime (src/app_en.js) implements
+// every flow itself; the 17 extracted modules were ~190 KB of dead weight
+// parsed at document-start and never reached the bundle. Deleted 2026-09-26
+// along with test/phase1-5, which tested those files instead of the shipped
+// code. Re-integrate by inlining the logic into src/app_en.js first.
 
 function getPackageMetadata() {
     if (!fs.existsSync(PKG_PATH)) {
@@ -85,22 +83,6 @@ function buildTarget() {
     const rootPath = path.join(ROOT_DIR, OUTPUT_FILENAME);
 
     let bundle = header + '\n(() => {\n    \'use strict\';\n\n';
-    bundle += '    /* ==========================================================================\n';
-    bundle += '       APPLICATION RUNTIME - Global English (modules live in src/, covered by phase1-5)\n';
-    bundle += '       ========================================================================== */\n\n';
-
-    // 1. Concatenate extracted modules
-    for (const relPath of MODULE_FILES) {
-        const fullPath = path.join(ROOT_DIR, relPath);
-        if (!fs.existsSync(fullPath)) {
-            throw new Error(`Module file missing: ${relPath}`);
-        }
-        const moduleContent = fs.readFileSync(fullPath, 'utf8');
-        bundle += `    // ─── Module: ${relPath} ──────────────────────────────────────\n`;
-        bundle += moduleContent + '\n\n';
-    }
-
-    // 2. Append application runtime
     bundle += '    /* ==========================================================================\n';
     bundle += '       APPLICATION RUNTIME & UI GLUE (Global English)\n';
     bundle += '       ========================================================================== */\n\n';
@@ -160,4 +142,4 @@ if (require.main === module) {
     }
 }
 
-module.exports = { build, buildTarget, MODULE_FILES };
+module.exports = { build, buildTarget };

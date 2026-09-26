@@ -11,9 +11,6 @@
         INSTAGRAM_WEB_APP_ID: '936619743392459',
         FOLLOWING_PAGE_SAFETY_LIMIT: 60,
         FOLLOWERS_PAGE_SAFETY_LIMIT: 250,
-        // Sweet spot (2026-09-24, same study as PACE_PRESETS): write actions restrict
-        // accounts far faster than reads — 15-30 s randomized per unfollow replaces
-        // the old 4.5-7.5 s (~500-800 actions/hour was well above safe guidance).
         UNFOLLOW_DELAY_MIN: 15000,
         UNFOLLOW_DELAY_MAX: 30000,
     };
@@ -657,8 +654,7 @@
                     following_count: following.length,
                     follower_ids: followers.map(u => String(u.pk || u.pk_id || u.id)),
                     following_ids: following.map(u => String(u.pk || u.pk_id || u.id)),
-                    // ponytail: separate id->username maps (not one fat blob) so lost-follower
-                    // rows can show real names without any extra API call; add an index when queried.
+                    // Separate id->username maps: lost-follower rows show real names with no extra API call.
                     follower_usernames: Object.fromEntries(followers.map(u => [String(u.pk || u.pk_id || u.id), String(u.username || '')]).filter(pair => pair[1])),
                     following_usernames: Object.fromEntries(following.map(u => [String(u.pk || u.pk_id || u.id), String(u.username || '')]).filter(pair => pair[1]))
                 };
@@ -873,7 +869,6 @@
                             'settings', 'accounts', 'api', 'legal', 'about', 'p', 'reel', 'tv'
                         ]);
 
-                        // 4a. Profile link with explicit aria-label or SVG Profile icon in nav
                         const profileLink = navAnchors.find(a => {
                             const svg = a.querySelector('svg[aria-label="Profile"], svg[aria-label="โปรไฟล์"]');
                             const aria = a.getAttribute('aria-label') || '';
@@ -887,7 +882,6 @@
                             }
                         }
 
-                        // 4b. Nav link that contains an avatar img inside the navigation container
                         if (!this.currentUsername) {
                             for (const a of navAnchors) {
                                 const parts = (a.getAttribute('href') || '').replace(/^\/|\/$/g, '').split('/');
@@ -911,8 +905,6 @@
         static hardBlockAccount = null;
         static hardBlockAt = 0;
 
-        // Hard block survives reload: the whole point is that the user cannot escape it
-        // by refreshing the page mid-block and firing another request.
         static restoreHardBlock() {
             try {
                 const raw = localStorage.getItem(HARD_BLOCK_KEY);
@@ -928,8 +920,7 @@
             try { localStorage.removeItem(HARD_BLOCK_KEY); } catch (_) {}
         }
 
-        // Story viewer analytics: who viewed MY story media (private web endpoint).
-        static async fetchStoryViewers(mediaId) {
+static async fetchStoryViewers(mediaId) {
             if (!/^\d+$/.test(String(mediaId || ''))) throw new Error('Invalid story media id');
             const data = await this.request(`/api/v1/media/${String(mediaId)}/list_reel_media_viewer/`);
             if (data?.status === 'ok' || Array.isArray(data?.users)) return Array.isArray(data.users) ? data.users : [];
@@ -969,7 +960,7 @@
             const fetchFn = typeof page.fetch === 'function' ? page.fetch.bind(page) : fetch;
             const method = String(options.method || 'GET').toUpperCase();
             const csrf = this.getCookie('csrftoken');
-            // ponytail: align headers with real Instagram Web client (no X-Requested-With, add X-ASBD-ID and X-IG-WWW-Claim)
+        
             const headers = {
                 'X-IG-App-ID': this.getAppId(),
                 'X-ASBD-ID': '129477',
@@ -1006,15 +997,7 @@
                         throw this.error('Session expired. Please log into Instagram and refresh.', 'AUTH', res.status);
                     }
                     if (res.status === 429 || /feedback_required|please wait|try again later|rate.limit/i.test(message)) {
-                        // Two different failures shared one 60s floor. A soft limit lifts in
-                        // minutes; an account-bound block recovers in 6+ hours AND every retry
-                        // during the block extends it (instagrapi source + Meta rate-limit docs).
-                        // Retrying a hard block on a 60s timer is what turns a nuisance into a
-                        // durable lockout, so hard never auto-retries.
-                        // Hard = the account is actually blocked, which Instagram says in
-                        // words. A plain 429 carrying error_type 'rate_limit_error' is the
-                        // ORDINARY soft limit — treating it as hard latched a 10-minute
-                        // nuisance into a 6-hour lockout that only Settings could clear.
+                        // Hard = Instagram says the account is blocked. Every other 429 is soft.
                         const hard = /feedback_required|sentry_block/i.test(message);
                         if (hard) {
                             this.hardBlockAccount = accountId;
@@ -1027,7 +1010,7 @@
                         const delay = retry && /^\d+(\.\d+)?$/.test(retry) ? Number(retry) * 1000 : Date.parse(retry) - Date.now();
                         this.cooldownUntil = Date.now() + Math.max(10 * 60 * 1000, Number.isFinite(delay) ? delay : 0);
                         this.cooldownAccount = accountId;
-                        // Surface the cooldown once at the moment it starts (all flows: scan/unfollow/media).
+                    
                         showToast(`⏳ Instagram soft rate limit — waiting ${Math.max(1, Math.ceil((this.cooldownUntil - Date.now()) / 1000))}s before the next request`, 4000);
                         throw this.error('Instagram soft rate limit. Waiting before the next request.', 'RATE_LIMIT', res.status);
                     }
@@ -1061,10 +1044,6 @@
             const csrf = this.getCookie('csrftoken');
             if (!csrf) throw this.error('CSRF token missing. Please refresh Instagram.', 'AUTH');
 
-            // Single route. The 3-route ladder tripled the write request count during
-            // exactly the conditions where request count costs most, and route 0 is
-            // verified working. A 404/405 here means the endpoint moved: stop and
-            // report rather than firing two more writes at a possibly unhappy account.
             const route = { url: `/web/friendships/${uid}/unfollow/`, headers: { 'Content-Type': 'application/x-www-form-urlencoded' } };
             const res = await this.request(route.url, {
                 method: 'POST',
@@ -1084,7 +1063,7 @@
             this.assertAccount(uid);
             const count = Math.min(50, Math.max(1, Number(APP_CONFIG.PAGE_SIZE) || 50));
             if (options.transport === 'graphql') {
-                // Compatibility route used by Instaloader's Profile.get_followers/get_followees.
+            
                 if (!window.__mpGqlTransportWarned) {
                     window.__mpGqlTransportWarned = true;
                     console.warn('[MaxPland] Legacy GraphQL relationship transport active (query_hash can rotate; REST remains primary)');
@@ -1111,7 +1090,7 @@
             all.pagesFetched = 0;
             const seenUsers = new Set(), seenCursors = new Set();
             let cursor = null, transport = 'rest';
-            // Scan resume: a stopped/paused scan persists cursor+users per page; cleared on completion.
+        
             const RESUME_KEY = `mp_scan_resume_${endpoint}`;
             let savedResume = null;
             try { savedResume = JSON.parse(localStorage.getItem(RESUME_KEY) || 'null'); } catch (_) {}
@@ -1127,11 +1106,6 @@
             const signal = STATE.scanController?.signal;
             const limit = Math.max(1, Math.min(250, Number(pageSafetyLimit) || 250));
             const fetchStats = { requestMs: 0, waitMs: 0 };
-            // Sweet spot (2026-09-24): field studies (instaloader RateController practice,
-            // Bellingcat toolkit guidance) + own incident log — sustained metronome
-            // pagination at 2-3 s/page tripped IG automation detection; serial single
-            // streams with randomized intervals and burst-then-rest patterns did not.
-            // Combined request rate is what detection sees: never fetch lists concurrently.
             const PACE_PRESETS = {
                 A: { page: [6000, 12000], restEvery: 30, rest: [60000, 120000] },
                 B: { page: [3000, 6000], restEvery: 40, rest: [45000, 90000] },
@@ -1149,8 +1123,7 @@
                         data = await this.fetchRelationshipPage(endpoint, userId, cursor, { transport, signal });
                         fetchStats.requestMs += performance.now() - t0;
                     } catch (err) {
-                        // Only first-page endpoint incompatibility can switch routes. Never mix cursors,
-                        // bypass session challenges, or repeat a rejected request unchanged.
+                    // Only a first-page endpoint error may switch route. Never mix cursors or retry a rejected request unchanged.
                         if (all.pagesFetched || transport !== 'rest' || err.code !== 'HTTP' || ![400,404].includes(err.status)) throw err;
                         transport = 'graphql';
                         onProgress?.(0, 0, 'Switching to fallback query endpoint...');
@@ -1196,8 +1169,6 @@
                     try {
                         localStorage.setItem(RESUME_KEY, JSON.stringify({ userId: String(userId), cursor, transport, pagesFetched: all.pagesFetched, users: all }));
                     } catch (_) { /* quota exceeded: resume survives only while storage allows */ }
-                    // Yield between pages: jittered per-mode delay + periodic long rest
-                    // (honor Stop/pause throughout). PAGE_SIZE/headers/transports untouched.
                     const pause = PACE.page[0] + Math.floor(Math.random() * (PACE.page[1] - PACE.page[0]));
                     const tw = performance.now();
                     for (let ms = 0; ms < pause && !STATE.stopScanFlag && !signal?.aborted; ms += 250) await sleep(250);
@@ -1318,10 +1289,7 @@
         } catch (_) {}
     }
 
-    // ponytail: display-only counter. There is deliberately no cap here — the 15-30s
-    // randomized delay is the actual safety control, and a per-day ceiling would only
-    // force a 1,200-account cleanup into a multi-day wait without reducing request
-    // rate. Remove when the user asks for a ceiling again.
+    // ponytail: no cap by owner decision; the 15-30s delay is the only brake. Add a ceiling if asked again.
     function getWriteBudget() {
         const day = new Date().toISOString().slice(0, 10);
         let saved = null;
@@ -1376,32 +1344,29 @@
         prefs: loadPrefs()
     };
 
-    // STEALTH STORY SEEN INTERCEPTOR (Ponytail: multi-channel stealth — fetch, XHR, sendBeacon masked)
+    // STEALTH STORY SEEN INTERCEPTOR
     let stealthSeenCount = 0;
     function isStorySeenRequest(url, body) {
         if (!STATE.prefs?.stealthStory) return false;
         const urlStr = String(url || '');
         const bodyStr = typeof body === 'string' ? body : (body ? JSON.stringify(body) : '');
 
-        // Safety Guard: never block read queries (drawing story rings, viewing profiles, feed)
+        // Never block read queries (story rings, profiles, feed).
         const isRead = /web_profile_info|users\/web_profile|PolarisProfile|ProfilePage|[A-Za-z0-9_]*Query\b/i.test(urlStr) ||
                        /operationName["']?\s*[:=]\s*["']?[A-Za-z0-9_]*Query\b/i.test(bodyStr);
         if (isRead) return false;
 
-        // 1. REST endpoint: /stories/reel/seen or /api/v1/stories/reel/seen
         if (/\/(?:api\/v1\/)?stories\/reel\/seen/i.test(urlStr)) return true;
 
-        // 2. viewSeenAt timestamp in query or body
         if (/viewSeenAt/i.test(urlStr) || /viewSeenAt/i.test(bodyStr)) return true;
 
-        // 3. GraphQL seen mutations
         if (/reels?_?media_?seen|Stor(?:y|ies)Seen/i.test(urlStr) || /reels?_?media_?seen|Stor(?:y|ies)Seen/i.test(bodyStr)) return true;
 
         return false;
     }
 
-    // ponytail: StoryMediaRegistry caches reels_media and GraphQL story payloads intercepted at document-start
-    // skipped: IndexedDB persistent cross-session media blob cache, add when offline reel playback is required
+    // ponytail: registry caches story payloads intercepted at document-start
+    // skipped: persistent cross-session blob cache, add when offline reel playback is needed
     const StoryMediaRegistry = {
         items: new Map(),
         cacheItem(item) {
@@ -1473,7 +1438,6 @@
             const FAKE_JSON = JSON.stringify({ status: 'ok' });
             const isStoryDataUrl = (u) => Boolean(u && typeof u === 'string' && (/reels?_?media|graphql\/query|\/api\/v1\/media\//i.test(u)));
 
-            // 1. Intercept fetch
             if (typeof win.fetch === 'function') {
                 const rawFetch = win.fetch;
                 const stealthFetch = function(resource, init = {}) {
@@ -1522,7 +1486,6 @@
                 win.fetch = stealthFetch;
             }
 
-            // 2. Intercept XMLHttpRequest
             if (win.XMLHttpRequest && win.XMLHttpRequest.prototype) {
                 const rawOpen = win.XMLHttpRequest.prototype.open;
                 const rawSend = win.XMLHttpRequest.prototype.send;
@@ -1577,7 +1540,6 @@
                 };
             }
 
-            // 3. Intercept navigator.sendBeacon
             if (win.navigator && typeof win.navigator.sendBeacon === 'function') {
                 const rawSendBeacon = win.navigator.sendBeacon.bind(win.navigator);
                 win.navigator.sendBeacon = function(url, data) {
@@ -1595,8 +1557,7 @@
     }
     installStorySeenInterceptor();
 
-    // CLEAN FEED MODE CONTROLLER
-    let cleanFeedObserver = null;
+let cleanFeedObserver = null;
     function applyCleanFeedMode() {
         const isEnabled = Boolean(STATE.prefs?.cleanFeed);
         let styleTag = document.getElementById('maxpland-clean-feed-style');
@@ -1616,7 +1577,7 @@
         if (!styleTag) {
             styleTag = document.createElement('style');
             styleTag.id = 'maxpland-clean-feed-style';
-            // ponytail: avoid display:none layout collapse which causes browser scroll-anchor to jump to top (0, 0)
+            // ponytail: avoid display:none — it collapses layout and makes scroll-anchor jump to (0,0)
             styleTag.textContent = `
                 article:has(a[href*="/ads/ig_redirect/"]),
                 article:has(a[href*="/ads/about/"]),
@@ -1663,8 +1624,7 @@
                     scanArticles();
                 }, 150);
             });
-            // ponytail: scope to <main> (the feed always lives there) with a body fallback —
-            // stops reacting to every sidebar/dialog/header mutation IG performs.
+                    // ponytail: scope to <main> with a body fallback — IG mutates sidebar/dialog/header constantly.
             const feedRoot = document.querySelector('main') || document.body || document.documentElement;
             cleanFeedObserver.observe(feedRoot, { childList: true, subtree: true });
         }
@@ -1680,16 +1640,14 @@
         stylesheet.textContent = NATIVE_IG_CSS;
         (document.head || document.documentElement).append(stylesheet);
 
-        // Mini Circular Floating Launcher Button
-        const triggerBtn = document.createElement('button');
+const triggerBtn = document.createElement('button');
         triggerBtn.type = 'button';
         triggerBtn.setAttribute('aria-label', 'Open IG MaxPland');
         triggerBtn.id = 'maxpland-trigger-btn';
         triggerBtn.title = 'MaxPland · Alt+Shift+M (Draggable)';
         triggerBtn.innerHTML = ICONS.LOGO;
 
-        // Restore saved position
-        try {
+try {
             const savedPos = JSON.parse(localStorage.getItem('maxpland_launcher_pos') || 'null');
             if (savedPos && typeof savedPos.x === 'number' && typeof savedPos.y === 'number') {
                 const clampX = Math.min(window.innerWidth - 50, Math.max(10, savedPos.x));
@@ -1703,8 +1661,7 @@
 
         document.body.appendChild(triggerBtn);
 
-        // Overlay & Modal Container
-        const overlay = document.createElement('div');
+const overlay = document.createElement('div');
         overlay.id = 'maxpland-studio-overlay';
         overlay.style.display = 'none';
 
@@ -2162,7 +2119,7 @@
             return;
         }
         const rows = viewers.slice(0, 100).map(u => {
-            // API response is a trust boundary: strip anything outside IG's username charset.
+        
             const name = String(u.username || u.pk || 'unknown').replace(/[^A-Za-z0-9._-]/g, '').slice(0, 40) || 'unknown';
             const when = u.timestamp ? new Date(u.timestamp * 1000).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
             return `<div style="display:flex;justify-content:space-between;gap:8px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.05);"><span>@${name}</span><span style="color:var(--mp-text-muted,#8b949e);white-space:nowrap;">${when}</span></div>`;
@@ -2189,8 +2146,7 @@
             triggerBtn.style.visibility = 'hidden';
             document.getElementById('maxpland-close-btn').focus();
 
-            // Resolve and show active account
-            const user = await IgBridge.resolveCurrentUser();
+const user = await IgBridge.resolveCurrentUser();
             const badge = document.getElementById('maxpland-account-badge');
             if (user && user.username) {
                 badge.textContent = `@${user.username}`;
@@ -2217,12 +2173,10 @@
             triggerBtn.focus();
         };
 
-        // Expose open/close functions globally for feed buttons & commands
-        window.openMaxPlandStudio = openModal;
+window.openMaxPlandStudio = openModal;
         window.closeMaxPlandStudio = closeModal;
 
-        // DRAGGABLE LOGIC FOR LAUNCHER BUTTON
-        let isPointerDown = false;
+let isPointerDown = false;
         let isDragging = false;
         let startX = 0, startY = 0;
         let startLeft = 0, startTop = 0;
@@ -2287,7 +2241,6 @@
         overlay.addEventListener('click', closeModal);
         document.getElementById('maxpland-close-btn').addEventListener('click', closeModal);
 
-        // Tab Switching
         const tabs = modal.querySelectorAll('.maxpland-tab-btn');
         tabs.forEach(tab => {
             tab.addEventListener('click', () => {
@@ -2306,7 +2259,6 @@
             });
         });
 
-        // Filter Switching (Pills)
         const filterBtns = document.getElementById('tab-relationship').querySelectorAll('.maxpland-pill-btn');
         filterBtns.forEach(btn => {
             btn.addEventListener('click', () => {
@@ -2319,7 +2271,6 @@
             });
         });
 
-        // Stat Card Quick Clicks
         modal.querySelectorAll('.maxpland-stat-card').forEach(card => {
             card.addEventListener('click', () => {
                 const target = card.dataset.targetFilter;
@@ -2328,7 +2279,6 @@
             });
         });
 
-        // Sub-filter Chips Toggles
         const toggleWhitelist = document.getElementById('toggle-filter-whitelist');
         toggleWhitelist.addEventListener('click', () => {
             STATE.subFilters.excludeWhitelist = !STATE.subFilters.excludeWhitelist;
@@ -2361,13 +2311,11 @@
 
         document.getElementById('toggle-filter-notfollowing').addEventListener('click', () => setFollowStateChip('onlyNotFollowed'));
 
-        // Search Input
         document.getElementById('maxpland-user-search').addEventListener('input', (e) => {
             STATE.searchQuery = e.target.value.trim().toLowerCase();
             renderRelationshipList();
         });
 
-        // Scan Actions
         document.getElementById('maxpland-btn-scan-relationships').addEventListener('click', runRelationshipScan);
         document.getElementById('maxpland-btn-stop-scan').addEventListener('click', () => {
             STATE.stopScanFlag = true;
@@ -2384,13 +2332,11 @@
             document.getElementById('maxpland-scan-phase').textContent = STATE.scanPaused ? 'Scan paused — progress saved page by page' : 'Fetching relationship pages...';
         });
 
-        // Whitelist Backup & Restore
         document.getElementById('maxpland-btn-backup-whitelist').addEventListener('click', exportWhitelistBackup);
         const restoreInput = document.getElementById('maxpland-whitelist-file-input');
         document.getElementById('maxpland-btn-restore-whitelist').addEventListener('click', () => restoreInput.click());
         restoreInput.addEventListener('change', handleWhitelistRestoreFile);
 
-        // Bulk Selection Actions
         document.getElementById('maxpland-btn-select-all').addEventListener('click', selectAllVisible);
         document.getElementById('maxpland-btn-deselect-all').addEventListener('click', () => {
             STATE.selectedIds.clear();
@@ -2399,17 +2345,14 @@
         });
         document.getElementById('maxpland-btn-batch-unfollow').addEventListener('click', runBatchUnfollow);
 
-        // Export Actions
         document.getElementById('maxpland-btn-copy-usernames').addEventListener('click', copyVisibleUsernames);
         document.getElementById('maxpland-btn-export-csv').addEventListener('click', exportRelationshipCSV);
         document.getElementById('maxpland-btn-export-json').addEventListener('click', exportRelationshipJSON);
 
-        // Media Downloader Actions
         document.getElementById('maxpland-btn-run-media-queue').addEventListener('click', () => runMediaQueue({ skipExisting: true }));
         document.getElementById('maxpland-btn-run-media-all').addEventListener('click', () => runMediaQueue({ skipExisting: false }));
         document.getElementById('maxpland-btn-refresh-vault').addEventListener('click', renderMediaVault);
 
-        // Feature Switches (Master Toggles)
         const swStealth = document.getElementById('pref-switch-stealth-story');
         if (swStealth) {
             swStealth.addEventListener('change', (e) => {
@@ -2448,7 +2391,6 @@
             });
         }
 
-        // Settings Threshold & Actions
         const selInactive = document.getElementById('pref-setting-inactive-threshold');
         if (selInactive) {
             selInactive.addEventListener('change', (e) => {
@@ -2502,11 +2444,10 @@
             });
         }
 
-        // Inactive Radar Scan Trigger
-        const btnScanInactive = document.getElementById('maxpland-btn-scan-inactive');
+const btnScanInactive = document.getElementById('maxpland-btn-scan-inactive');
         if (btnScanInactive) btnScanInactive.addEventListener('click', runInactiveScan);
 
-        // ponytail: Native Event Delegation for Relationship List (Zero Memory Leaks & 60fps Search)
+        // Native event delegation for the relationship list.
         const relList = document.getElementById('maxpland-relationship-list');
         if (relList) {
             relList.addEventListener('change', (e) => {
@@ -2519,7 +2460,6 @@
             });
 
             relList.addEventListener('click', async (e) => {
-                // 1. Star Toggle
                 const star = e.target.closest('.maxpland-star-btn');
                 if (star && !star.disabled) {
                     const uid = star.dataset.id;
@@ -2542,14 +2482,10 @@
                     return;
                 }
 
-                // 2. Single Unfollow
                 const btn = e.target.closest('.maxpland-row-unfollow-btn');
                 if (btn && !btn.disabled) {
                     if (STATE.isScanning || STATE.isUnfollowing || STATE.isScanningInactive || STATE.scanIncomplete) return;
-                    // Measured leak: the row button had no pacing at all, so a user
-                    // clicking row-by-row fired 5 writes in 472ms (91ms apart) while the
-                    // batch path waits 15-30s between the same writes. Same delay, enforced
-                    // here too, so the two paths cannot disagree about the write rate.
+                    // Same 15-30s delay as batch unfollow, so the two paths cannot disagree on write rate.
                     const since = Date.now() - (STATE.lastUnfollowAt || 0);
                     const wait = APP_CONFIG.UNFOLLOW_DELAY_MAX - since;
                     if (wait > 0) {
@@ -2630,7 +2566,7 @@
         }
         if (!user || !user.profile_pic_url) return true;
         if (user.has_anonymous_profile_picture === true) return true;
-        // ponytail: patterns inlined at this single live site (config copy removed — identical values); hoist back to config when a second live site appears
+    
         const patterns = [
             '44884218_345707102882519_2446069589734326272_n',
             '464760996_1254146839119862_3605321457742435801_n'
@@ -2773,9 +2709,6 @@
                 if (!result.completed) throw result.lastError || new Error(`Incomplete fetch for ${endpoint}`);
                 lists[endpoint] = result;
             };
-            // Every speed mode fetches serially: concurrent double-streams doubled the
-            // combined request rate — the signal automation detection watches for.
-            // Mode speed now comes purely from PACE_PRESETS inside fetchAllRelationships.
             for (const endpoint of ['followers', 'following']) {
                 finishList(endpoint, await startList(endpoint));
             }
@@ -2824,15 +2757,14 @@
             const lostFollowers = (prev?.follower_ids || []).filter(id => !followerIdSet.has(String(id))).map(id => {
                 const sid = String(id);
                 const uname = prevUsernames[sid] || idxMap.get(sid) || `user_${sid}`;
-                // Block detector: gone from followers AND from our following list -> blocked us
-                // or deactivated. Still in following -> plain unfollow.
+                    // Gone from followers AND our following list -> blocked us or deactivated. Still following -> plain unfollow.
                 const gone = !followingIdSet.has(sid) && !followingUsernameSet.has(String(uname).toLowerCase());
                 return {
                     pk: sid, id: sid, username: uname, profile_pic_url: '',
                     full_name: gone ? 'Gone — blocked us or deactivated' : 'Unfollowed since the previous scan'
                 };
             });
-            // Rename detector: same follower ids whose username changed since the previous scan.
+        
             const renamed = [];
             if (prev && typeof prevUsernames === 'object') {
                 const currentById = new Map(followers.map(f => [String(f.id || f.pk_id || f.pk || ''), f]));
@@ -2876,8 +2808,6 @@
         } catch (err) {
             const cooling = err?.code === 'RATE_LIMIT';
             if (cooling) showToast(`⏳ ${err.message} — retry after the cooldown ends.`, 5000);
-            // A soft limit is not a failure: the phase line said "Scan failed" while the
-            // notice right above it said "retry after the cooldown ends". Say what it is.
             phase.textContent = STATE.stopScanFlag || err.name === 'AbortError' ? 'Scan stopped' : cooling ? 'Paused · rate limit' : 'Scan failed';
             notice.textContent = `⚠️ ${err.message} · Relationships not updated`;
             notice.style.display = 'block';
@@ -2892,7 +2822,7 @@
             pauseBtnEnd.style.display = 'none';
             pauseBtnEnd.textContent = '⏸ Pause';
             renderRelationshipList();
-            // Keep failed scan diagnostics visible until the next action.
+        
             if (!STATE.scanIncomplete) STATE.progressHideTimer = setTimeout(() => { progress.style.display = 'none'; }, 2500);
         }
     }
@@ -2901,9 +2831,7 @@
        8. FILTER & RENDER ENGINE
        ========================================================================== */
 
-    // ponytail: getFilteredUsers runs on every keystroke and from 17 call sites;
-    // rebuilding a Set of every followed id each time dominated the filter cost.
-    // Rebuild only when the array identity or length actually changes.
+    // getFilteredUsers runs per keystroke; rebuild the followed-id index only when the array changes.
     let followedIdIndex = new Set(), followedIdSource = null, followedIdCount = -1;
     function getFollowedIdIndex() {
         if (followedIdSource !== STATE.following || followedIdCount !== STATE.following.length) {
@@ -3293,8 +3221,7 @@
                 const ext = extensionFromUrl(node.progressiveVideoUrl, 'mp4');
                 files.push(await gmDownload(node.progressiveVideoUrl, `${base}.${ext}`));
             } else if (node.imageUrl) {
-                // Video stream unavailable: the thumbnail is stored under its own type
-                // so the next run still retries the real video instead of skipping it.
+                    // No video stream: store the thumb under its own type so the next run retries the real video.
                 const thumbType = node.mediaType === 'video' ? 'video_thumb' : node.mediaType;
                 const ext = extensionFromUrl(node.imageUrl, node.mediaType === 'video' ? 'jpg' : 'jpg');
                 files.push(await gmDownload(node.imageUrl, `${base}.${ext}`));
@@ -3386,7 +3313,7 @@
                 if (signal.aborted) break;
                 IgBridge.assertAccount(accountId);
                 const cacheValid = cached?.checked_at && Date.now() - cached.checked_at < 14 * 86400 * 1000;
-                // ponytail: preserve the 20-request ceiling; cached rows need no new request.
+            
                 if (!cacheValid && newFetches >= 20) break;
                 phase.textContent = `[Inactive Radar] Checking @${user.username || uid} (${checked + 1}/${pool.length})...`;
                 let lastTakenAt = cached?.last_post_taken_at;
@@ -3450,7 +3377,6 @@
         const followerCount = STATE.followers.length;
         const followingCount = STATE.following.length;
 
-        // 1. Ratio
         const ratio = followingCount > 0 ? (followerCount / followingCount) : 0;
         const ratioVal = el('health-ratio-val');
         const ratioBadge = el('health-ratio-badge');
@@ -3478,7 +3404,6 @@
             }
         }
 
-        // 2. Mutual Rate
         const mutualVal = el('health-mutual-val');
         const mutualBadge = el('health-mutual-badge');
         if (mutualVal && mutualBadge) {
@@ -3492,7 +3417,6 @@
             }
         }
 
-        // 3. Not Back Outbound
         const notbackVal = el('health-notback-val');
         const notbackBadge = el('health-notback-badge');
         if (notbackVal && notbackBadge) {
@@ -3506,7 +3430,6 @@
             }
         }
 
-        // 4. Ghost & Inactive Impact
         const ghostVal = el('health-ghost-val');
         const ghostBadge = el('health-ghost-badge');
         if (ghostVal && ghostBadge) {
@@ -3521,7 +3444,6 @@
             }
         }
 
-        // 5. Historical Snapshots & Pure SVG Sparkline
         const chartBox = el('health-chart-container');
         const deltaLabel = el('health-drift-delta');
         try {
@@ -3577,7 +3499,6 @@
             }
         } catch (_) {}
 
-        // 6. Advice Box
         const advice = el('health-advice-text');
         if (advice) {
             if (STATE.notFollowingBack.length > 50) {
@@ -3650,9 +3571,7 @@
                         break;
                     }
                 }
-                // ponytail: media queue was the only request loop with a constant 800ms
-                // gap — a metronome. jittered to the same band as the inactive radar
-                // loop (3.5-6s) but capped low so a long queue stays practical.
+
                 if (i < codes.length - 1) await sleep(1800 + Math.floor(Math.random() * 1200));
             }
             if (!stopped) status.textContent = 'Downloaded: ' + done + ', Skipped: ' + skipped + ', Failed: ' + failed + ' · ' + queue.finished.size + '/' + codes.length + ' done';
@@ -3666,8 +3585,7 @@
         }
     }
 
-    // In-Feed Media Native Action Bar Integration (Zero Vertical Space Waste)
-    function injectInFeedDownloadButtons(root = document) {
+function injectInFeedDownloadButtons(root = document) {
         if (STATE.prefs && STATE.prefs.quickDownloadFeed === false) {
             document.querySelectorAll('.maxpland-action-wrap').forEach(el => el.remove());
             return;
@@ -3677,11 +3595,9 @@
             const section = article.querySelector('section');
             if (!section) return;
 
-            // Remove legacy banner if present
             const oldBanner = article.querySelector('.maxpland-feed-tools');
             if (oldBanner) oldBanner.remove();
 
-            // Prevent duplicate insertion
             if (section.querySelector('.maxpland-action-wrap')) return;
 
             const wrap = document.createElement('div');
@@ -3697,7 +3613,6 @@
             const menu = document.createElement('div');
             menu.className = 'maxpland-action-menu';
 
-            // 1. Single Media Download (Dynamic: Video or Photo)
             const dlSingle = document.createElement('button');
             dlSingle.type = 'button';
             dlSingle.className = 'maxpland-menu-item maxpland-menu-dl-single';
@@ -3708,7 +3623,6 @@
                 runFeedAction(article, btn, { allCarousel: false });
             };
 
-            // 2. Carousel All Download (only if multi-item post)
             const dlAll = document.createElement('button');
             dlAll.type = 'button';
             dlAll.className = 'maxpland-menu-item maxpland-menu-dl-all';
@@ -3719,7 +3633,6 @@
                 runFeedAction(article, btn, { allCarousel: true });
             };
 
-            // 3. Open in new tab
             const openTab = document.createElement('button');
             openTab.type = 'button';
             openTab.className = 'maxpland-menu-item';
@@ -3730,11 +3643,9 @@
                 openMediaDirectLink(article);
             };
 
-            // 4. Divider
             const divider = document.createElement('div');
             divider.className = 'maxpland-menu-divider';
 
-            // 5. Open MaxPland Studio
             const openStudio = document.createElement('button');
             openStudio.type = 'button';
             openStudio.className = 'maxpland-menu-item';
@@ -3776,7 +3687,6 @@
 
             wrap.append(btn, menu);
 
-            // Integrate into section alongside bookmark/save or at the end
             const bookmarkIcon = section.querySelector('svg[aria-label*="Save"], svg[aria-label*="บันทึก"], svg[aria-label*="Remove"], svg[aria-label*="ลบออก"], polygon');
             const bookmarkContainer = bookmarkIcon ? bookmarkIcon.closest('button, div[role="button"]') : null;
             if (bookmarkContainer && bookmarkContainer.parentElement) {
@@ -3829,7 +3739,6 @@
             }
         }
 
-        // DOM Fallback
         IgBridge.assertAccount(accountId);
         const video = article.querySelector('video');
         const img = article.querySelector('img[srcset]') || article.querySelector('img');
@@ -3853,9 +3762,8 @@
         else alert('No media URL found for this item');
     }
 
-    // Story & Highlight Tools
-    // ponytail: resolveCurrentStoryMedia extracts pristine image/poster directly from center active story section
-    // skipped: video stream scraping and open-tab actions to prevent UI freezing and blob errors; add when Instagram opens unencrypted public streams
+// ponytail: extract pristine image/poster from the center active story
+    // skipped: video stream scraping, add when Instagram serves unencrypted public streams
     function findCenterElement(selector, root = document) {
         const viewportCenterX = (window.innerWidth || 800) / 2;
         let best = null;
@@ -3913,13 +3821,11 @@
     function pickStoryMedia(selectorVideo, selectorImg) {
         const activeSection = getActiveStorySection();
 
-        // 1. Video in active section or centered
         let video = (typeof activeSection?.querySelector === 'function' ? activeSection.querySelector('video') : null) || null;
         if (!video) {
             video = findCenterElement(selectorVideo || 'section video, video');
         }
 
-        // 2. Story image in active section or centered (avatar-proof)
         let img = null;
         const imgCandidates = (activeSection && typeof activeSection.querySelectorAll === 'function')
             ? activeSection.querySelectorAll(selectorImg || 'img._aa63, img[crossorigin], img[referrerpolicy], img')
@@ -3959,8 +3865,8 @@
         return { video, img, mediaUrl, activeSection };
     }
 
-    // ponytail: extractMediaFromFiber walks React Fiber return chain with strict bounds (no recursion, zero UI freeze)
-    // skipped: recursive fiber graph walking to prevent browser freeze; add when React moves item props off parent return chain
+    // ponytail: extractMediaFromFiber walks the Fiber return chain with strict bounds (no recursion)
+    // skipped: recursive graph walking, add when React moves item props off the parent chain
     function extractMediaFromFiber(el) {
         if (!el) return null;
         const keys = Object.keys(el);
@@ -3997,13 +3903,12 @@
         return null;
     }
 
-    // ponytail: resolveCurrentStoryMedia extracts pristine 1080p story MP4/JPG via bounded Fiber, network registry, or DOM
-    // skipped: third-party proxy fetchers to prevent auth leak and 429 checkpoint; add when client-side extraction fails entirely
+    // ponytail: 1080p story MP4/JPG via bounded Fiber, network registry, or DOM
+    // skipped: third-party proxy fetchers, add when client-side extraction fails entirely
     async function resolveCurrentStoryMedia(isThumb = false) {
         const activeSection = getActiveStorySection();
         const { video, img } = pickStoryMedia('section video', 'section img._aa63, section img[crossorigin], section img[referrerpolicy]');
 
-        // 1. Direct video poster from active story if specifically requested
         if (isThumb) {
             const poster = video?.getAttribute?.('poster') || video?.poster;
             if (poster && /^https?:\/\//i.test(poster)) {
@@ -4011,7 +3916,6 @@
             }
         }
 
-        // 2. React Fiber extraction (lightning fast, bounded parent return loop, 0ms, zero-freeze)
         const fiberCandidates = [video, img, activeSection].filter(Boolean);
         for (const cand of fiberCandidates) {
             const fiber = extractMediaFromFiber(cand);
@@ -4024,7 +3928,6 @@
             }
         }
 
-        // 3. Network Cache lookup (StoryMediaRegistry)
         let mediaId = null;
         if (activeSection && typeof activeSection.querySelector === 'function') {
             const storyLink = activeSection.querySelector('a[href*="/stories/"]');
@@ -4044,7 +3947,6 @@
             if (url) return { url, isVideo, source: 'cache', isBlob: false };
         }
 
-        // 4. Native DOM fallback
         if (!isThumb && video) {
             const vSrc = video.currentSrc || video.src || '';
             if (vSrc && /^https?:\/\//i.test(vSrc) && !vSrc.startsWith('blob:')) {
@@ -4062,7 +3964,6 @@
             }
         }
 
-        // 5. API Fallback (IgBridge.fetchMediaInfo)
         if (mediaId) {
             try {
                 const item = await IgBridge.fetchMediaInfo(mediaId);
@@ -4077,7 +3978,6 @@
             }
         }
 
-        // 6. Video poster fallback if video blob could not be resolved
         const poster = video?.getAttribute?.('poster') || video?.poster;
         if (poster && /^https?:\/\//i.test(poster)) {
             return { url: poster, isVideo: false, source: 'dom-poster', isBlob: false };
@@ -4086,8 +3986,8 @@
         return { url: null, isVideo: Boolean(video), isBlob: Boolean(video?.currentSrc?.startsWith('blob:')), source: 'none' };
     }
 
-    // ponytail: Story toolbar: Stealth Seen toggle + Open Raw + Viewers (3 controls)
-    // skipped: story media downloads removed per user direction due to unstable Instagram MSE blob stream encryption; add when a non-fragile public media API is available
+    // ponytail: toolbar = Stealth toggle + Open Raw + Viewers (3 controls)
+    // skipped: story media download, add when a non-fragile public media URL exists
     function injectStoryBar() {
         if (!location.pathname.startsWith('/stories/')) {
             const existing = document.getElementById('maxpland-story-bar');
@@ -4134,10 +4034,6 @@
             showToast(next ? 'Stealth Story Viewer enabled (Seen blocked)' : 'Stealth Story Viewer disabled');
         };
 
-        // ponytail: story DOWNLOAD buttons stay removed (fragile per v2.7.2), but "Open Raw"
-        // only hands the resolved URL to a new tab — no download pipeline to break.
-        // Technique adapted from navchandar/Instagram_Story_Saver, re-written around our
-        // 5-layer resolver instead of blind parentNode climbing.
         const openBtn = document.createElement('button');
         openBtn.type = 'button';
         openBtn.id = 'maxpland-story-open-btn';
@@ -4172,8 +4068,7 @@
         };
 
         openBtn.onclick = async () => {
-            // Open the tab synchronously inside the click gesture to dodge popup blockers,
-            // then fill in the real URL once the resolver settles.
+                    // Open the tab inside the click gesture to dodge popup blockers, then set the real URL.
             const win = window.open('about:blank', '_blank', 'noopener');
             try {
                 const media = await resolveCurrentStoryMedia();
@@ -4194,8 +4089,7 @@
         document.body.appendChild(bar);
     }
 
-    // Profile HD Avatar Downloader
-    function injectProfileAvatarBadge() {
+function injectProfileAvatarBadge() {
         const pathParts = location.pathname.split('/').filter(Boolean);
         if (pathParts.length !== 1 || ['explore','stories','reels','direct','accounts'].includes(pathParts[0])) {
             const b = document.getElementById('maxpland-profile-avatar-btn');
@@ -4251,9 +4145,7 @@
                 }
             }, 300);
         });
-        // ponytail: story bar / feed buttons / avatar badge all live under <main>;
-        // the profile header badge lives under <header>. Observe both roots and
-        // fall back to body when either is missing (degrades to the old scope).
+                    // ponytail: feed UI lives under <main>, the avatar badge under <header>; fall back to body.
         const pageRoots = [document.querySelector('main'), document.querySelector('header')].filter(Boolean);
         for (const root of (pageRoots.length ? pageRoots : [document.body])) {
             observer.observe(root, { childList: true, subtree: true });
@@ -4287,7 +4179,7 @@
 
         installStorySeenInterceptor();
         applyCleanFeedMode();
-        // A block that survives a reload is the point; restore it before any request.
+    
         IgBridge.restoreHardBlock();
         const blockRow = document.getElementById('maxpland-block-row');
         if (blockRow && IgBridge.hardBlockAccount) blockRow.style.display = '';

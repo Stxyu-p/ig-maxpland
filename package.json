@@ -1,21 +1,19 @@
 {
   "name": "ig-maxpland",
-  "version": "3.0.0",
-  "description": "Instagram Relationship Scanner & Comprehensive Media Downloader (Clean Architecture v3.0.0)",
+  "version": "3.0.1",
+  "description": "Instagram Relationship Scanner & Comprehensive Media Downloader",
   "main": "dist/ig_maxpland_en.user.js",
   "scripts": {
     "build": "node build.js",
     "dev": "node build.js --watch",
-    "test": "node test/phase1.check.cjs && node test/phase2.check.cjs && node test/phase3.check.cjs && node test/phase4.check.cjs && node test/phase5.check.cjs && node round1.check.cjs dist/ig_maxpland_en.user.js",
-    "test:modules": "node test/phase1.check.cjs && node test/phase2.check.cjs && node test/phase3.check.cjs && node test/phase4.check.cjs && node test/phase5.check.cjs",
+    "test": "node round1.check.cjs dist/ig_maxpland_en.user.js",
     "test:bundle": "node round1.check.cjs dist/ig_maxpland_en.user.js"
   },
   "keywords": [
     "instagram",
     "userscript",
     "tampermonkey",
-    "violentmonkey",
-    "clean-architecture"
+    "violentmonkey"
   ],
   "author": "P Choke & SORA",
   "license": "MIT"
