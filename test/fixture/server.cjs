@@ -17,6 +17,8 @@ const cfg = {
   failAfter: 0,          // 0 = never. N = the Nth relationship page returns 429
   checkpoint: false,     // return a challenge payload on every API call
   rateLimitFirst: false, // 401 on the first call (auth expiry simulation)
+  softRateLimit: false,  // one 429 with error_type 'rate_limit_error' — the soft-tier shape
+  _softFired: false,
   followersTotal: 137,   // 3 pages at 50
   followingTotal: 63,    // 2 pages
   viewerFanout: 41,      // users returned by the story-viewer endpoint
@@ -128,7 +130,7 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8', 'Content-Length': Buffer.byteLength(s) });
     return res.end(s);
   }
-  if (p === '/__fixture/reset') { cfg.logRequests.length = 0; cfg.failAfter = 0; cfg.checkpoint = false; return j(res, 200, { ok: true }); }
+  if (p === '/__fixture/reset') { cfg.logRequests.length = 0; cfg.failAfter = 0; cfg.checkpoint = false; cfg.softRateLimit = false; cfg._softFired = false; return j(res, 200, { ok: true }); }
 
   // ---- API surface the script calls ----
   const rel = p.match(/^\/api\/v1\/friendships\/(\d+)\/(followers|following)\/?$/);
@@ -137,6 +139,9 @@ const server = http.createServer((req, res) => {
     if (cfg.rateLimitFirst) { cfg.rateLimitFirst = false; return j(res, 401, { message: 'login_required' }); }
     const n = cfg.logRequests.filter(r => r.p === p).length;
     if (cfg.failAfter && n > cfg.failAfter) return j(res, 429, { message: 'feedback_required', error_type: 'rate_limit' }, { 'Retry-After': '30' });
+    // P0 probe: the exact soft-limit body Instagram actually sends — 429 + error_type
+    // 'rate_limit_error' with no feedback/sentry wording. Must stay on the soft tier.
+    if (cfg.softRateLimit && !cfg._softFired) { cfg._softFired = true; return j(res, 429, { message: 'Please wait a few minutes before you try again.', error_type: 'rate_limit_error' }); }
     return j(res, 200, pageOf(rel[2], u.searchParams.get('max_id')));
   }
   if (p.match(/^\/api\/v1\/media\/\d+\/list_reel_media_viewer\/?$/)) {
@@ -146,8 +151,15 @@ const server = http.createServer((req, res) => {
   if (p.match(/^\/api\/v1\/media\/\d+\/info\/?$/)) {
     const single = { pk: '90001', id: '90001', media_type: 1, taken_at: Math.floor(Date.now() / 1000) - 86400 * 3, user: { username: 'user_1' }, caption: { text: 'fixture caption' }, image_versions2: { candidates: [{ url: 'https://example.invalid/media/90001-1080.jpg', width: 1080, height: 1080 }, { url: 'https://example.invalid/media/90001-150.jpg', width: 150, height: 150 }] } };
     const carousel = { pk: '90002', id: '90002', media_type: 8, taken_at: Math.floor(Date.now() / 1000) - 86400 * 3, user: { username: 'user_2' }, image_versions2: { candidates: [{ url: 'https://example.invalid/media/90002-a.jpg', width: 1080, height: 1080 }] }, carousel_media: [single, { ...single, pk: '90003', id: '90003', media_type: 2, image_versions2: { candidates: [{ url: 'https://example.invalid/media/90003-thumb.jpg', width: 640, height: 640 }] }, video_versions: [{ url: 'https://example.invalid/media/90003-1080.mp4', width: 1080, height: 1920 }] }] };
+    // The script turns the shortcode into a numeric id, so key the fixture off that id.
+    if (p === '/api/v1/media/91002/info/') {
+      const nodes = [];
+      for (let i = 0; i < 6; i++) nodes.push({ ...single, pk: String(91000 + i), id: String(91000 + i), image_versions2: { candidates: [{ url: `https://example.invalid/media/9100${i}.jpg`, width: 1080, height: 1080 }] } });
+      return j(res, 200, { items: [{ ...carousel, carousel_media: nodes }], num_results: 1 });
+    }
     const short = String(u.searchParams.get('shortcode') || '');
-    return j(res, 200, { items: [short === 'fixturecarousel' ? carousel : single], num_results: 1 });
+    if (short === 'fixturecarousel' || short === 'fixturefull') return j(res, 200, { items: [carousel], num_results: 1 });
+    return j(res, 200, { items: [single], num_results: 1 });
   }
   if (p === '/api/v1/users/web_profile_info/') {
     return j(res, 200, { data: { user: { id: VIEWER, username: VIEWER, profile_pic_url: 'https://example.invalid/avatar/me.jpg', profile_pic_url_hd: 'https://example.invalid/avatar/me-hd.jpg' } } });

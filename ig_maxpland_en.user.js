@@ -1045,7 +1045,11 @@
                         // during the block extends it (instagrapi source + Meta rate-limit docs).
                         // Retrying a hard block on a 60s timer is what turns a nuisance into a
                         // durable lockout, so hard never auto-retries.
-                        const hard = /feedback_required|sentry_block/i.test(message) || data?.error_type === 'rate_limit_error';
+                        // Hard = the account is actually blocked, which Instagram says in
+                        // words. A plain 429 carrying error_type 'rate_limit_error' is the
+                        // ORDINARY soft limit — treating it as hard latched a 10-minute
+                        // nuisance into a 6-hour lockout that only Settings could clear.
+                        const hard = /feedback_required|sentry_block/i.test(message);
                         if (hard) {
                             this.hardBlockAccount = accountId;
                             this.hardBlockAt = Date.now();
@@ -2904,8 +2908,11 @@
             summary.textContent = `Followers ${followers.length.toLocaleString()} · Following ${following.length.toLocaleString()} · Fetch ${fmtMs(STATE.scanStatus.requestMs)} · Pacing ${fmtMs(STATE.scanStatus.waitMs)} · Total ${fmtMs(STATE.scanStatus.wallMs)}`;
             showToast('Scan completed successfully');
         } catch (err) {
-            if (err?.code === 'RATE_LIMIT') showToast(`⏳ ${err.message} — retry after the cooldown ends.`, 5000);
-            phase.textContent = STATE.stopScanFlag || err.name === 'AbortError' ? 'Scan stopped' : 'Scan failed';
+            const cooling = err?.code === 'RATE_LIMIT';
+            if (cooling) showToast(`⏳ ${err.message} — retry after the cooldown ends.`, 5000);
+            // A soft limit is not a failure: the phase line said "Scan failed" while the
+            // notice right above it said "retry after the cooldown ends". Say what it is.
+            phase.textContent = STATE.stopScanFlag || err.name === 'AbortError' ? 'Scan stopped' : cooling ? 'Paused · rate limit' : 'Scan failed';
             notice.textContent = `⚠️ ${err.message} · Relationships not updated`;
             notice.style.display = 'block';
             summary.textContent = phase.textContent;
