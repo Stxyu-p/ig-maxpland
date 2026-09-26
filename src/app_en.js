@@ -16,7 +16,15 @@
         // the old 4.5-7.5 s (~500-800 actions/hour was well above safe guidance).
         UNFOLLOW_DELAY_MIN: 15000,
         UNFOLLOW_DELAY_MAX: 30000,
+        // Write ceiling. The 15-30s delay is an interval, not a budget: sustained it
+        // still permits 120-240 unfollows per hour of continuous running, above every
+        // reported safe daily band. These caps are deliberately at the conservative end
+        // because the published figures are anecdotal and mutually inconsistent.
+        UNFOLLOW_SESSION_CAP: 80,
+        UNFOLLOW_DAILY_CAP: 200,
     };
+    const HARD_BLOCK_KEY = 'maxpland_hard_block';
+    const WRITE_BUDGET_KEY = 'maxpland_write_budget';
 
     const ICONS = {
         LOGO: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="20" x="2" y="2" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/></svg>`,
@@ -906,6 +914,25 @@
 
         static cooldownUntil = 0;
         static cooldownAccount = null;
+        static hardBlockAccount = null;
+        static hardBlockAt = 0;
+
+        // Hard block survives reload: the whole point is that the user cannot escape it
+        // by refreshing the page mid-block and firing another request.
+        static restoreHardBlock() {
+            try {
+                const raw = localStorage.getItem(HARD_BLOCK_KEY);
+                if (!raw) return;
+                const saved = JSON.parse(raw);
+                if (saved?.account) { this.hardBlockAccount = String(saved.account); this.hardBlockAt = Number(saved.at) || Date.now(); }
+            } catch (_) {}
+        }
+
+        static clearHardBlock() {
+            this.hardBlockAccount = null;
+            this.hardBlockAt = 0;
+            try { localStorage.removeItem(HARD_BLOCK_KEY); } catch (_) {}
+        }
 
         // Story viewer analytics: who viewed MY story media (private web endpoint).
         static async fetchStoryViewers(mediaId) {
@@ -926,7 +953,7 @@
         }
 
         static isSessionError(err) {
-            return ['AUTH', 'CHECKPOINT', 'RATE_LIMIT', 'ACCOUNT_CHANGED'].includes(err?.code);
+            return ['AUTH', 'CHECKPOINT', 'RATE_LIMIT', 'ACCOUNT_CHANGED', 'BLOCKED'].includes(err?.code);
         }
 
         static async request(url, options = {}) {
@@ -936,6 +963,10 @@
             }
             const accountId = options.accountId || this.getCookie('ds_user_id');
             this.assertAccount(accountId);
+            if (this.hardBlockAccount === accountId) {
+                const hours = Math.max(0, Math.ceil((6 * 3600 * 1000 - (Date.now() - this.hardBlockAt)) / 3600000));
+                throw this.error(`Instagram blocked this account. Requests are refused until you clear it in Settings${hours > 0 ? ` (at least ${hours}h after the block)` : ''}.`, 'BLOCKED');
+            }
             if (this.cooldownAccount === accountId && Date.now() < this.cooldownUntil) {
                 const seconds = Math.ceil((this.cooldownUntil - Date.now()) / 1000);
                 throw this.error(`Instagram rate limit reached. Please wait ${seconds} seconds.`, 'RATE_LIMIT', 429);
@@ -975,19 +1006,32 @@
                     const message = String(data?.message || data?.error_type || '');
                     const redirected = res.url || '';
                     if (/challenge|checkpoint|consent_required/i.test(message + redirected) || data?.challenge || data?.checkpoint_url) {
-                        throw this.error('Instagram requires checkpoint verification. Please solve challenge on Instagram web.', 'CHECKPOINT', res.status);
+                        throw this.error('Instagram requires checkpoint verification. Solve it at instagram.com -> Settings -> Account Status, then retry.', 'CHECKPOINT', res.status);
                     }
                     if (res.status === 401 || /login_required|\/accounts\/login/i.test(message + redirected)) {
                         throw this.error('Session expired. Please log into Instagram and refresh.', 'AUTH', res.status);
                     }
                     if (res.status === 429 || /feedback_required|please wait|try again later|rate.limit/i.test(message)) {
+                        // Two different failures shared one 60s floor. A soft limit lifts in
+                        // minutes; an account-bound block recovers in 6+ hours AND every retry
+                        // during the block extends it (instagrapi source + Meta rate-limit docs).
+                        // Retrying a hard block on a 60s timer is what turns a nuisance into a
+                        // durable lockout, so hard never auto-retries.
+                        const hard = /feedback_required|sentry_block/i.test(message) || data?.error_type === 'rate_limit_error';
+                        if (hard) {
+                            this.hardBlockAccount = accountId;
+                            this.hardBlockAt = Date.now();
+                            try { localStorage.setItem(HARD_BLOCK_KEY, JSON.stringify({ account: accountId, at: this.hardBlockAt })); } catch (_) {}
+                            showToast('⛔ Instagram has blocked this account. Stop for 6+ hours — do not retry.', 12000);
+                            throw this.error('Instagram blocked this account (feedback_required). Stop all requests for 6+ hours, then clear the block from MaxPland Settings.', 'BLOCKED', res.status);
+                        }
                         const retry = res.headers?.get('Retry-After');
                         const delay = retry && /^\d+(\.\d+)?$/.test(retry) ? Number(retry) * 1000 : Date.parse(retry) - Date.now();
-                        this.cooldownUntil = Date.now() + Math.max(60000, Number.isFinite(delay) ? delay : 60000);
+                        this.cooldownUntil = Date.now() + Math.max(10 * 60 * 1000, Number.isFinite(delay) ? delay : 0);
                         this.cooldownAccount = accountId;
                         // Surface the cooldown once at the moment it starts (all flows: scan/unfollow/media).
-                        showToast(`⏳ Instagram rate limit — waiting ${Math.max(1, Math.ceil((this.cooldownUntil - Date.now()) / 1000))}s before the next request`, 4000);
-                        throw this.error('Instagram rate limit active. Please rest before trying again.', 'RATE_LIMIT', res.status);
+                        showToast(`⏳ Instagram soft rate limit — waiting ${Math.max(1, Math.ceil((this.cooldownUntil - Date.now()) / 1000))}s before the next request`, 4000);
+                        throw this.error('Instagram soft rate limit. Waiting before the next request.', 'RATE_LIMIT', res.status);
                     }
                     if (res.status === 403) throw this.error('Instagram forbidden (403). Check account status on web.', 'AUTH', 403);
                     if (/^\s*</.test(text)) throw this.error('Instagram returned HTML instead of JSON. Check login status.', 'HTML_RESPONSE', res.status);
@@ -1019,39 +1063,21 @@
             const csrf = this.getCookie('csrftoken');
             if (!csrf) throw this.error('CSRF token missing. Please refresh Instagram.', 'AUTH');
 
-            const candidateRoutes = [
-                { url: `/web/friendships/${uid}/unfollow/`, headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
-                { url: `/api/v1/web/friendships/${uid}/unfollow/`, headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
-                {
-                    url: `/api/v1/friendships/destroy/${uid}/`,
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: new URLSearchParams({ user_id: uid, _uid: accountId, _csrftoken: csrf }).toString()
-                }
-            ];
-
-            let lastError = null;
-            for (let i = 0; i < candidateRoutes.length; i++) {
-                this.assertAccount(accountId);
-                if (i > 0) await sleep(1000);
-                const route = candidateRoutes[i];
-                try {
-                    const res = await this.request(route.url, {
-                        method: 'POST',
-                        accountId,
-                        headers: route.headers,
-                        body: route.body
-                    });
-                    if (res?.friendship_status?.following === false || (res?.status === 'ok' && res.friendship_status === undefined)) {
-                        return true;
-                    }
-                    throw this.error('Instagram did not confirm the unfollow. Check the profile before retrying', 'UNCONFIRMED');
-                } catch (err) {
-                    lastError = err;
-                    // Never repeat an ambiguous write or a rejected session on another route.
-                    if (err.code !== 'HTTP' || ![404, 405].includes(err.status)) throw err;
-                }
+            // Single route. The 3-route ladder tripled the write request count during
+            // exactly the conditions where request count costs most, and route 0 is
+            // verified working. A 404/405 here means the endpoint moved: stop and
+            // report rather than firing two more writes at a possibly unhappy account.
+            const route = { url: `/web/friendships/${uid}/unfollow/`, headers: { 'Content-Type': 'application/x-www-form-urlencoded' } };
+            const res = await this.request(route.url, {
+                method: 'POST',
+                accountId,
+                headers: route.headers,
+                body: undefined
+            });
+            if (res?.friendship_status?.following === false || (res?.status === 'ok' && res.friendship_status === undefined)) {
+                return true;
             }
-            throw lastError || new Error('Instagram did not confirm unfollow. Check profile on web.');
+            throw this.error('Instagram did not confirm the unfollow. Check the profile before retrying', 'UNCONFIRMED');
         }
 
         static async fetchRelationshipPage(endpoint, userId, cursor = null, options = {}) {
@@ -1292,6 +1318,37 @@
         try {
             localStorage.setItem('maxpland_prefs', JSON.stringify(prefs));
         } catch (_) {}
+    }
+
+    // ponytail: one localStorage read, not a watch. Counts unfollows per day and per
+    // browser session; checked BEFORE each write so a retry cannot slip past it.
+    // Reset button lives in Settings. Escalate to a server-side counter when the
+    // user runs multiple tabs (localStorage is per-origin, not per-tab).
+    function getWriteBudget() {
+        const day = new Date().toISOString().slice(0, 10);
+        let saved = null;
+        try { saved = JSON.parse(localStorage.getItem(WRITE_BUDGET_KEY)); } catch (_) {}
+        if (!saved || saved.day !== day) saved = { day, daily: 0, session: 0 };
+        return saved;
+    }
+    function consumeWriteBudget() {
+        const b = getWriteBudget();
+        if (b.daily >= APP_CONFIG.UNFOLLOW_DAILY_CAP) {
+            return { ok: false, reason: `daily`, used: b.daily, cap: APP_CONFIG.UNFOLLOW_DAILY_CAP };
+        }
+        if (b.session >= APP_CONFIG.UNFOLLOW_SESSION_CAP) {
+            return { ok: false, reason: 'session', used: b.session, cap: APP_CONFIG.UNFOLLOW_SESSION_CAP };
+        }
+        b.daily++; b.session++;
+        try { localStorage.setItem(WRITE_BUDGET_KEY, JSON.stringify(b)); } catch (_) {}
+        return { ok: true, used: b.daily, cap: APP_CONFIG.UNFOLLOW_DAILY_CAP };
+    }
+    function resetWriteBudget() {
+        try { localStorage.removeItem(WRITE_BUDGET_KEY); } catch (_) {}
+    }
+    function formatBudget() {
+        const b = getWriteBudget();
+        return `${b.session}/${APP_CONFIG.UNFOLLOW_SESSION_CAP} this session · ${b.daily}/${APP_CONFIG.UNFOLLOW_DAILY_CAP} today`;
     }
 
     const STATE = {
@@ -2038,6 +2095,20 @@
                             </div>
                             <button type="button" class="maxpland-btn-danger" id="setting-btn-clear-cache" style="padding:5px 10px;font-size:12px;">Purge Radar Cache</button>
                         </div>
+                        <div class="maxpland-settings-row" id="maxpland-block-row" style="display:none;">
+                            <div>
+                                <div style="font-weight:600;font-size:13px;color:var(--mp-rose);">Account Block Active</div>
+                                <div style="font-size:11.5px;color:var(--mp-text-muted);">Instagram returned feedback_required. All requests are refused until you clear this. Wait 6+ hours first — retrying during a block extends it.</div>
+                            </div>
+                            <button type="button" class="maxpland-btn-danger" id="setting-btn-clear-block" style="padding:5px 10px;font-size:12px;">Clear Block</button>
+                        </div>
+                        <div class="maxpland-settings-row">
+                            <div>
+                                <div style="font-weight:600;font-size:13px;">Unfollow Write Budget</div>
+                                <div style="font-size:11.5px;color:var(--mp-text-muted);" id="maxpland-budget-label">${formatBudget()}</div>
+                            </div>
+                            <button type="button" class="maxpland-btn-secondary" id="setting-btn-reset-budget" style="padding:5px 10px;font-size:12px;">Reset Counters</button>
+                        </div>
                     </div>
                 </div>
 
@@ -2408,6 +2479,26 @@
         const btnSettingRestore = document.getElementById('setting-btn-restore-whitelist');
         if (btnSettingRestore) btnSettingRestore.addEventListener('click', () => restoreInput.click());
         const btnClearCache = document.getElementById('setting-btn-clear-cache');
+        const btnClearBlock = document.getElementById('setting-btn-clear-block');
+        const btnResetBudget = document.getElementById('setting-btn-reset-budget');
+        const blockRow = document.getElementById('maxpland-block-row');
+        const budgetLabel = document.getElementById('maxpland-budget-label');
+        if (btnClearBlock) {
+            btnClearBlock.addEventListener('click', () => {
+                if (!confirm('Only clear this if you have already waited 6+ hours since Instagram blocked the account.\n\nClearing it lets MaxPland send requests again immediately. If you are early, you can extend the block.\n\nClear the block?')) return;
+                IgBridge.clearHardBlock();
+                if (blockRow) blockRow.style.display = 'none';
+                showToast('Account block cleared. MaxPland will send requests again.');
+            });
+        }
+        if (btnResetBudget) {
+            btnResetBudget.addEventListener('click', () => {
+                if (!confirm('Reset the unfollow counters to zero?\n\nOnly do this if you are certain the earlier count was wrong. The cap exists to limit total write volume per day.')) return;
+                resetWriteBudget();
+                if (budgetLabel) budgetLabel.textContent = formatBudget();
+                showToast('Unfollow counters reset to 0.');
+            });
+        }
         if (btnClearCache) {
             btnClearCache.addEventListener('click', async () => {
                 if (confirm('Do you want to purge all cached account activity timestamps?')) {
@@ -2619,6 +2710,8 @@
         if (STATE.isScanning || STATE.isUnfollowing || STATE.isScanningInactive) return;
         if (STATE.prefs?.scanSpeed === 'C'
             && !confirm('⚠️ Mode C pages at 1.5-3 s (fastest tier, still serial + periodic rests)\nStill higher detection risk than A/B — prefer off-peak hours\nProceed with the high-speed scan?')) return;
+        if (STATE.prefs?.scanSpeed === 'B'
+            && !confirm('⚠️ Mode B pages at 3-6 s. It is roughly 2x the request rate of Safe mode and no published figure supports it.\nUse it only when you know you need the speed.\nProceed with mode B?')) return;
         STATE.isScanning = true;
         STATE.stopScanFlag = false;
         STATE.scanController = new AbortController();
@@ -2802,6 +2895,19 @@
        8. FILTER & RENDER ENGINE
        ========================================================================== */
 
+    // ponytail: getFilteredUsers runs on every keystroke and from 17 call sites;
+    // rebuilding a Set of every followed id each time dominated the filter cost.
+    // Rebuild only when the array identity or length actually changes.
+    let followedIdIndex = new Set(), followedIdSource = null, followedIdCount = -1;
+    function getFollowedIdIndex() {
+        if (followedIdSource !== STATE.following || followedIdCount !== STATE.following.length) {
+            followedIdSource = STATE.following;
+            followedIdCount = STATE.following.length;
+            followedIdIndex = new Set(STATE.following.map(x => String(x.id || x.pk_id || x.pk || '').trim()));
+        }
+        return followedIdIndex;
+    }
+
     function getFilteredUsers() {
         let pool = [];
         if (STATE.relationshipFilter === 'not_following_back') pool = STATE.notFollowingBack;
@@ -2813,7 +2919,7 @@
         else if (STATE.relationshipFilter === 'inactive') pool = STATE.inactiveFollowing;
         else if (STATE.relationshipFilter === 'whitelist') pool = Array.from(STATE.whitelist.values());
 
-        const followedIds = new Set(STATE.following.map(x => String(x.id || x.pk_id || x.pk || '').trim()));
+        const followedIds = getFollowedIdIndex();
         return pool.filter(u => {
             const uid = String(u.id || u.pk_id || u.pk || '');
             const uname = String(u.username || '').toLowerCase();
@@ -2992,8 +3098,13 @@
         }
 
         const estSeconds = Math.round(count * ((APP_CONFIG.UNFOLLOW_DELAY_MIN + APP_CONFIG.UNFOLLOW_DELAY_MAX) / 2000));
-        const proceed = confirm(`⚠️ Safety warning:\nYou are about to unfollow ${count} accounts\nEstimated duration: ${Math.ceil(estSeconds / 60)} minutes (random delay ${APP_CONFIG.UNFOLLOW_DELAY_MIN / 1000}-${APP_CONFIG.UNFOLLOW_DELAY_MAX / 1000} seconds per account)\n\nStart now?`);
+        const budget = getWriteBudget();
+        const proceed = confirm(`⚠️ Safety warning:\nYou are about to unfollow ${count} accounts\nEstimated duration: ${Math.ceil(estSeconds / 60)} minutes (random delay ${APP_CONFIG.UNFOLLOW_DELAY_MIN / 1000}-${APP_CONFIG.UNFOLLOW_DELAY_MAX / 1000} seconds per account)\nWrite budget: ${formatBudget()}\n\nStart now?`);
         if (!proceed) return;
+        if (budget.daily + count > APP_CONFIG.UNFOLLOW_DAILY_CAP) {
+            alert(`This batch (${count}) would exceed today's unfollow cap of ${APP_CONFIG.UNFOLLOW_DAILY_CAP}.\n\nUsed: ${formatBudget()}\n\nUnfollow fewer accounts, or wait until tomorrow. You can reset the counter in Settings if you are certain.`);
+            return;
+        }
 
         STATE.isUnfollowing = true;
         STATE.stopUnfollowFlag = false;
@@ -3025,6 +3136,17 @@
                 const userObj = STATE.notFollowingBack.find(u => String(u.id || u.pk_id || u.pk || '') === uid)
                     || STATE.following.find(u => String(u.id || u.pk_id || u.pk || '') === uid);
                 if (isProtectedUser(uid, userObj?.username)) { STATE.selectedIds.delete(uid); continue; }
+                // Checked before the request, not after: a batch that runs past the cap
+                // stops with a clear message instead of silently overshooting.
+                const budget = consumeWriteBudget();
+                if (!budget.ok) {
+                    STATE.stopUnfollowFlag = true;
+                    phaseEl.textContent = `Stopped at the ${budget.reason} unfollow cap (${budget.used}/${budget.cap})`;
+                    noticeEl.textContent = `Safety cap reached. ${formatBudget()}. Reset the counter in Settings if you are certain.`;
+                    noticeEl.style.display = 'block';
+                    showToast(`⏸️ Unfollow stopped at the ${budget.reason} cap`, 6000);
+                    break;
+                }
                 const uname = userObj ? `@${userObj.username}` : `UID ${uid}`;
 
                 phaseEl.textContent = `Unfollowing [${i + 1}/${idsToUnfollow.length}]: ${uname}`;
@@ -3061,6 +3183,8 @@
             updateBulkActionBar();
             renderRelationshipList();
             showToast(`Unfollow completed: ${successCount} succeeded, ${failCount} failed`);
+            const budgetLabel = document.getElementById('maxpland-budget-label');
+            if (budgetLabel) budgetLabel.textContent = formatBudget();
         } finally {
             STATE.isUnfollowing = false;
             if (!STATE.stopUnfollowFlag) STATE.progressHideTimer = setTimeout(() => { progressCont.style.display = 'none'; }, 2500);
@@ -3534,7 +3658,10 @@
                         break;
                     }
                 }
-                if (i < codes.length - 1) await sleep(800);
+                // ponytail: media queue was the only request loop with a constant 800ms
+                // gap — a metronome. jittered to the same band as the inactive radar
+                // loop (3.5-6s) but capped low so a long queue stays practical.
+                if (i < codes.length - 1) await sleep(1800 + Math.floor(Math.random() * 1200));
             }
             if (!stopped) status.textContent = 'Downloaded: ' + done + ', Skipped: ' + skipped + ', Failed: ' + failed + ' · ' + queue.finished.size + '/' + codes.length + ' done';
         } catch (err) { status.textContent = err.message; }
@@ -4168,6 +4295,12 @@
 
         installStorySeenInterceptor();
         applyCleanFeedMode();
+        // A block that survives a reload is the point; restore it before any request.
+        IgBridge.restoreHardBlock();
+        const blockRow = document.getElementById('maxpland-block-row');
+        if (blockRow && IgBridge.hardBlockAccount) blockRow.style.display = '';
+        const budgetLabel = document.getElementById('maxpland-budget-label');
+        if (budgetLabel) budgetLabel.textContent = formatBudget();
 
         injectInFeedDownloadButtons();
         injectStoryBar();
