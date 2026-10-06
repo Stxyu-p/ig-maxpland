@@ -50,23 +50,6 @@ IG MaxPland operates under five strict engineering constraints:
 
 ---
 
-## 🆕 What's New in v3.0.1
-
-- **🗑️ Removed 190 KB of dead code:** the 17 extracted modules under `src/modules/`, `src/core/`, `src/features/`, `src/ui/`, and `src/utils/` were never referenced by the shipped runtime. They and their `test/phase1`-`test/phase5` suites are deleted; the bundle is now header + `src/app_en.js` only.
-- **🧪 Tests that test what ships:** `npm test` runs `round1.check.cjs` against the production bundle, 51 invariants, including the soft/hard rate-limit tiers, the persistent hard block, and the row-unfollow pacing guard.
-- **🛡️ Safety fixes (v3.0.1):**
-  - A plain HTTP 429 with `error_type: rate_limit_error` stays on the **soft** tier (10-minute cooldown, auto-retriable). Only `feedback_required` / `sentry_block` latch the 6-hour hard block. Previously an ordinary rate limit latched a lockout only Settings could clear.
-  - The hard block persists to `localStorage`, so refreshing the page cannot escape it. `Settings → Clear Block` is the only exit, behind a confirmation.
-  - Row-by-row unfollow is paced with the same 15-30 s randomized delay as batch unfollow. It previously had no pacing at all, measured at 91 ms between writes, ~200× faster than the batch path.
-  - Unfollow uses a single proven route. The ambiguous-write ladder was removed.
-  - A soft limit reports `Paused · rate limit` instead of `Scan failed`, matching the notice beside it.
-  - Relationship search no longer rebuilds a followed-ID set on every keystroke (measured 67.9 ms → 1.6 ms per keystroke).
-- **📦 Zero-Dependency Build Pipeline (`build.js`):**
-  - Generates `dist/ig_maxpland_en.user.js` and syncs the root `ig_maxpland_en.user.js`.
-  - `npm run build`, `npm run dev` (with `--watch`), and `npm test`.
-
----
-
 ## 📊 Feature Comparison
 
 | Capability | Generic Web Scrapers | Common IG Extensions | ⚡ **IG MaxPland** |
