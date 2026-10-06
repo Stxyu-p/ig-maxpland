@@ -4,8 +4,8 @@
 
 **Enterprise-Grade Relationship Intelligence & Precision Media Downloader for Instagram Web**
 
-*High Speed · Zero-Footprint Privacy · Stealth Anti-Detection*  
-*Pure Vanilla JavaScript · Zero Dependencies · Single-Source Build Pipeline*
+*High Speed, Zero-Footprint Privacy, Stealth Anti-Detection*  
+*Pure Vanilla JavaScript, Zero Dependencies, Single-Source Build Pipeline*
 
 [![Install Raw](https://img.shields.io/badge/Install-Userscript%20Raw-0284c7?style=for-the-badge&logo=tampermonkey&logoColor=white)](#-quick-install)
 [![Release](https://img.shields.io/badge/Release-v3.0.1-10b981?style=for-the-badge)](https://github.com/Stxyu-p/ig-maxpland/releases)
@@ -51,12 +51,12 @@ IG MaxPland operates under five strict engineering constraints:
 
 ## 🆕 What's New in v3.0.1
 
-- **🗑️ Removed 190 KB of dead code:** the 17 extracted modules under `src/modules/`, `src/core/`, `src/features/`, `src/ui/`, and `src/utils/` were never referenced by the shipped runtime. They and their `test/phase1`–`test/phase5` suites are deleted; the bundle is now header + `src/app_en.js` only.
-- **🧪 Tests that test what ships:** `npm test` runs `round1.check.cjs` against the production bundle — 51 invariants, including the soft/hard rate-limit tiers, the persistent hard block, and the row-unfollow pacing guard.
+- **🗑️ Removed 190 KB of dead code:** the 17 extracted modules under `src/modules/`, `src/core/`, `src/features/`, `src/ui/`, and `src/utils/` were never referenced by the shipped runtime. They and their `test/phase1`-`test/phase5` suites are deleted; the bundle is now header + `src/app_en.js` only.
+- **🧪 Tests that test what ships:** `npm test` runs `round1.check.cjs` against the production bundle, 51 invariants, including the soft/hard rate-limit tiers, the persistent hard block, and the row-unfollow pacing guard.
 - **🛡️ Safety fixes (v3.0.1):**
   - A plain HTTP 429 with `error_type: rate_limit_error` stays on the **soft** tier (10-minute cooldown, auto-retriable). Only `feedback_required` / `sentry_block` latch the 6-hour hard block. Previously an ordinary rate limit latched a lockout only Settings could clear.
   - The hard block persists to `localStorage`, so refreshing the page cannot escape it. `Settings → Clear Block` is the only exit, behind a confirmation.
-  - Row-by-row unfollow is paced with the same 15–30 s randomized delay as batch unfollow. It previously had no pacing at all — measured at 91 ms between writes, ~200× faster than the batch path.
+  - Row-by-row unfollow is paced with the same 15-30 s randomized delay as batch unfollow. It previously had no pacing at all, measured at 91 ms between writes, ~200× faster than the batch path.
   - Unfollow uses a single proven route. The ambiguous-write ladder was removed.
   - A soft limit reports `Paused · rate limit` instead of `Scan failed`, matching the notice beside it.
   - Relationship search no longer rebuilds a followed-ID set on every keystroke (measured 67.9 ms → 1.6 ms per keystroke).
@@ -77,7 +77,7 @@ IG MaxPland operates under five strict engineering constraints:
 | **Inactive Account Radar** | ❌ None | ❌ None | ✅ **Safe 20/batch Deep Post Timestamps** |
 | **Account Health Dashboard** | ❌ None | ⚠️ Paid cloud subscription | ✅ **Local Snapshot Diff & SVG Sparklines** |
 | **Unfollow Protection** | ❌ None | ❌ None | ✅ **Starred Whitelist + JSON Portability** |
-| **Anti-Detection Pacing** | ❌ Fixed rapid spam (high ban risk) | ❌ Automated loop | ✅ **Randomized 15–30 s writes, two-tier rate limiting** |
+| **Anti-Detection Pacing** | ❌ Fixed rapid spam (high ban risk) | ❌ Automated loop | ✅ **Randomized 15-30 s writes, two-tier rate limiting** |
 | **In-Feed Media Downloader** | ⚠️ Watermarked or downscaled | ⚠️ Heavy memory-leaking ZIPs | ✅ **Direct 1-Click Stream to Disk** |
 | **External Dependencies** | ❌ jQuery, Lodash, external CDNs | ❌ Multi-megabyte bundles | ✅ **Zero Dependencies (Pure Vanilla JS)** |
 
@@ -109,7 +109,7 @@ graph TD
 
 ## 🛠️ Feature Deep Dive
 
-### 👁️ 01 · Stealth Story Viewer (Ghost Mode)
+### 👁️ 01: Stealth Story Viewer (Ghost Mode)
 
 Watch Instagram stories anonymously. Telemetry beacons indicating you have seen a story are intercepted and dropped before exiting your machine, while media playback continues without disruption.
 
@@ -127,7 +127,7 @@ graph LR
 
 ---
 
-### 🧹 02 · Clean Feed Mode
+### 🧹 02: Clean Feed Mode
 
 Removes sponsored advertisements and suggested accounts from the home feed with zero layout shift.
 
@@ -137,18 +137,18 @@ Removes sponsored advertisements and suggested accounts from the home feed with 
 
 ---
 
-### ⏱️ 03 · Inactive Following Radar
+### ⏱️ 03: Inactive Following Radar
 
 Audits your following list for dormant accounts that have stopped publishing new content.
 
 - **Configurable Inactivity Window:** Select from **90 days** (3 months), **180 days** (6 months), **365 days** (1 year), or **730 days** (2 years).
 - **Batch Safety Ceiling:** Hard cap of **20 fresh profile queries per batch** to strictly honor Meta rate limits.
-- **Randomized Jitter:** Enforces 3,500–6,000ms delay between profile evaluations.
+- **Randomized Jitter:** Enforces 3,500-6,000ms delay between profile evaluations.
 - **Local Persistence:** Verified post timestamps are stored in IndexedDB so repeat audits complete instantly.
 
 ---
 
-### 🔍 04 · Relationship Intelligence & Safe Unfollower
+### 🔍 04: Relationship Intelligence & Safe Unfollower
 
 Comprehensive audit of reciprocal relationships with defensive unfollowing protections.
 
@@ -163,14 +163,14 @@ Comprehensive audit of reciprocal relationships with defensive unfollowing prote
 
 #### 🛡️ Unfollow Safety Safeguards
 - **Starred Whitelist (⭐):** Lock friends or creators to permanently prevent accidental unfollows across all interfaces.
-- **Humanized Jitter Pacing:** Randomized 15–30 s between every unfollow, batch or row-by-row, with a visible refusal message when you click too soon.
+- **Humanized Jitter Pacing:** Randomized 15-30 s between every unfollow, batch or row-by-row, with a visible refusal message when you click too soon.
 - **Server Confirmation Enforcement:** Unfollow actions are committed only after verified HTTP 200 responses; ambiguous failures immediately abort the queue.
 - **Two-Tier Rate Limiting:** Ordinary 429s cool down for 10 minutes and resume automatically. Only a real Instagram block (`feedback_required` / `sentry_block`) latches a 6-hour hold that survives a page refresh and is cleared from Settings.
 - **JSON Portability:** Export and import your whitelist configuration across browsers and machines.
 
 ---
 
-### 📥 05 · Precision In-Feed Downloader & Media Vault
+### 📥 05: Precision In-Feed Downloader & Media Vault
 
 Stream high-resolution assets directly to disk without quality degradation.
 
@@ -197,9 +197,9 @@ Stream high-resolution assets directly to disk without quality degradation.
 ## 🔒 Security & Privacy Standard
 
 > [!IMPORTANT]
-> **Zero Third-Party Communication · Zero Credentials Required**
+> **Zero Third-Party Communication, Zero Credentials Required**
 
-1. **Session-Native Transport:** Runs entirely within your authenticated browser session — never requests or stores login credentials.
+1. **Session-Native Transport:** runs entirely within your authenticated browser session, never requests or stores login credentials.
 2. **Meta Header Parity:** Sends genuine browser headers (`X-ASBD-ID`, dynamic `X-IG-WWW-Claim`) without legacy scraping signatures.
 3. **Local Storage Only:** Relationship snapshots, settings, and media logs reside solely in client-side IndexedDB (`IG_MAXPLAND_VAULT`).
 4. **Zero CDN Inclusions:** Self-contained script with zero `@require` dependencies eliminates supply-chain vulnerabilities.
@@ -213,14 +213,14 @@ Meta deploys machine-learning anomaly detectors on Instagram Web to flag automat
 
    | Action | Delay |
    | :--- | :--- |
-   | Relationship scan (Safe) | 6–12 s per page + 60–120 s rest every 30 pages |
-   | Relationship scan (Balanced / Fast) | 3–6 s / 1.5–3 s per page, with confirmations |
-   | Unfollow (batch **and** row-by-row) | **15–30 s** |
-   | Inactive radar | 3.5–6 s |
-   | Media queue | 1.8–3 s |
+   | Relationship scan (Safe) | 6-12 s per page + 60-120 s rest every 30 pages |
+   | Relationship scan (Balanced / Fast) | 3-6 s / 1.5-3 s per page, with confirmations |
+   | Unfollow (batch **and** row-by-row) | **15-30 s** |
+   | Inactive radar | 3.5-6 s |
+   | Media queue | 1.8-3 s |
 
 3. **Session-Native Header Parity:** Sends genuine browser headers (`X-ASBD-ID`, dynamic `X-IG-WWW-Claim`) extracted directly from the user's active session, leaving zero third-party bot signatures.
-4. **Two-Tier Rate Limiting:** An ordinary 429 costs a 10-minute cooldown and resumes on its own. A genuine Instagram block costs a 6-hour hold that survives a refresh — deliberately not auto-expiring, so a stray retry cannot restart the cycle.
+4. **Two-Tier Rate Limiting:** An ordinary 429 costs a 10-minute cooldown and resumes on its own. A genuine Instagram block costs a 6-hour hold that survives a refresh, deliberately not auto-expiring, so a stray retry cannot restart the cycle.
 
 ---
 
@@ -228,7 +228,7 @@ Meta deploys machine-learning anomaly detectors on Instagram Web to flag automat
 
 | Path | Purpose |
 | :--- | :--- |
-| `src/app_en.js` | The entire runtime — IgBridge, features, UI |
+| `src/app_en.js` | The entire runtime: IgBridge, features, UI |
 | `dist/ig_maxpland_en.user.js` | Production bundle, built from `src/app_en.js` |
 | `ig_maxpland_en.user.js` | Root copy of the bundle (userscript install target) |
 | `test/fixture/` | Local API fixture used for browser testing |
@@ -256,7 +256,7 @@ npm run dev
 npm run build
 ```
 
-**Verification Status:** **51/51 invariant checks passing** on the production bundle. The suite runs against `dist/ig_maxpland_en.user.js` — the same bytes users install.
+**Verification Status:** **51/51 invariant checks passing** on the production bundle. The suite runs against `dist/ig_maxpland_en.user.js`, the same bytes users install.
 
 ---
 
