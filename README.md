@@ -197,31 +197,35 @@ Stream high-resolution assets directly to disk without quality degradation.
 
 ## 🔒 Security & Privacy Standard
 
-> [!IMPORTANT]
 > **Zero Third-Party Communication, Zero Credentials Required**
 
-1. **Session-Native Transport:** runs entirely within your authenticated browser session, never requests or stores login credentials.
-2. **Meta Header Parity:** Sends genuine browser headers (`X-ASBD-ID`, dynamic `X-IG-WWW-Claim`) without legacy scraping signatures.
-3. **Local Storage Only:** Relationship snapshots, settings, and media logs reside solely in client-side IndexedDB (`IG_MAXPLAND_VAULT`).
-4. **Zero CDN Inclusions:** Self-contained script with zero `@require` dependencies eliminates supply-chain vulnerabilities.
+| Security Dimension | Technical Mechanism | Guarantee |
+| :--- | :--- | :--- |
+| **Session-Native Transport** | Executes within authenticated browser session context | Zero credential requests; passwords never touch memory |
+| **Meta Header Parity** | Sends browser headers (`X-ASBD-ID`, dynamic `X-IG-WWW-Claim`) | Matches native web client; eliminates scraping signatures |
+| **Local Vault Storage** | Client-side IndexedDB (`IG_MAXPLAND_VAULT`) storage only | Relationship snapshots never leave your local machine |
+| **Zero CDN Supply Chain** | Pure self-contained script with zero `@require` dependencies | Zero external script injection or supply-chain risk |
 
-### 🛡️ Anti-Detection Mathematical Safety Model
+### 🛡️ Anti-Detection Behavioral Envelope
 
 Meta deploys machine-learning anomaly detectors on Instagram Web to flag automated bot activity. IG MaxPland operates strictly within human behavioral envelopes:
 
-1. **Bounded Batch Ceiling:** Profile queries are hard-capped at **20 fresh profiles per batch**. Subsequent lookups require explicit user action, preventing runaway requests.
-2. **Randomized Jitter Interval:** Every request waits a randomized interval, never a fixed one:
+| Protection Layer | Operational Policy | Technical Enforcement |
+| :--- | :--- | :--- |
+| **Bounded Batch Ceiling** | Max 20 fresh profiles per batch lookup | Prevents runaway requests; subsequent queries require user trigger |
+| **Session Header Parity** | Native web client request signature | Extracts dynamic session tokens directly from active DOM session |
+| **Two-Tier Rate Limiting** | Soft (HTTP 429) vs Hard (Action Block) | Soft tier auto-resumes after 10m; Hard blocks enforce 6h persistent latch |
+| **Action Jitter Pacing** | Dynamic humanized random delays | Paced delay prevents uniform robotic request intervals (detailed below) |
 
-   | Action | Delay |
-   | :--- | :--- |
-   | Relationship scan (Safe) | 6-12 s per page + 60-120 s rest every 30 pages |
-   | Relationship scan (Balanced / Fast) | 3-6 s / 1.5-3 s per page, with confirmations |
-   | Unfollow (batch **and** row-by-row) | **15-30 s** |
-   | Inactive radar | 3.5-6 s |
-   | Media queue | 1.8-3 s |
+#### Pacing & Delay Schedule
 
-3. **Session-Native Header Parity:** Sends genuine browser headers (`X-ASBD-ID`, dynamic `X-IG-WWW-Claim`) extracted directly from the user's active session, leaving zero third-party bot signatures.
-4. **Two-Tier Rate Limiting:** An ordinary 429 costs a 10-minute cooldown and resumes on its own. A genuine Instagram block costs a 6-hour hold that survives a refresh, deliberately not auto-expiring, so a stray retry cannot restart the cycle.
+| Action | Delay Range | Safety Context |
+| :--- | :--- | :--- |
+| **Relationship scan (Safe)** | 6–12 s per page | Includes 60–120 s rest window every 30 pages |
+| **Relationship scan (Balanced / Fast)** | 3–6 s / 1.5–3 s per page | Fast modes enforce user confirmation prompts |
+| **Unfollow (batch and row)** | **15–30 s** | Strictly randomized per individual account action |
+| **Inactive radar** | 3.5–6 s | Staggered activity checks |
+| **Media download queue** | 1.8–3 s | Paced CDN resource retrieval |
 
 ---
 
