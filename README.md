@@ -9,6 +9,7 @@
 
 [![Install Raw](https://img.shields.io/badge/Install-Userscript%20Raw-0284c7?style=for-the-badge&logo=tampermonkey&logoColor=white)](#-quick-install)
 [![Release](https://img.shields.io/badge/Release-v3.0.1-10b981?style=for-the-badge)](https://github.com/Stxyu-p/ig-maxpland/releases)
+[![Changelog](https://img.shields.io/badge/Changelog-View_Notes-blueviolet?style=for-the-badge)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/License-MIT-f59e0b?style=for-the-badge)](LICENSE)
 
 ![Dependencies](https://img.shields.io/badge/Dependencies-Zero-success?style=flat-square)
@@ -257,6 +258,12 @@ npm run build
 ```
 
 **Verification Status:** **51/51 invariant checks passing** on the production bundle. The suite runs against `dist/ig_maxpland_en.user.js`, the same bytes users install.
+
+---
+
+## 📜 Release History & Changelog
+
+All version release notes and historical changes are documented in [CHANGELOG.md](CHANGELOG.md) per Keep a Changelog standards.
 
 ---
 
