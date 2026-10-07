@@ -1,6 +1,6 @@
 <div align="center">
 
-# ⚡ IG MaxPland <sub>v3.0.1</sub>
+# ⚡ IG MaxPland <sub>v3.2.0</sub>
 
 **Enterprise-Grade Relationship Intelligence & Precision Media Downloader for Instagram Web**
 
@@ -8,7 +8,7 @@
 *Pure Vanilla JavaScript, Zero Dependencies, Single-Source Build Pipeline*
 
 [![Install Raw](https://img.shields.io/badge/Install-Userscript%20Raw-0284c7?style=for-the-badge&logo=tampermonkey&logoColor=white)](#-quick-install)
-[![Release](https://img.shields.io/badge/Release-v3.0.1-10b981?style=for-the-badge)](https://github.com/Stxyu-p/ig-maxpland/releases)
+[![Release](https://img.shields.io/badge/Release-v3.2.0-10b981?style=for-the-badge)](https://github.com/Stxyu-p/ig-maxpland/releases)
 [![Changelog](https://img.shields.io/badge/Changelog-View_Notes-blueviolet?style=for-the-badge)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/License-MIT-f59e0b?style=for-the-badge)](LICENSE)
 
@@ -27,8 +27,8 @@
 
 | Channel | Edition | Source | Link |
 | :--- | :--- | :--- | :--- |
-| 🌐 **Userscript** | Global English Edition (v3.0.1) | Greasy Fork | [**👉 Install IG MaxPland**](https://greasyfork.org/en/scripts/595787-ig-maxpland) |
-| 📦 **Direct** | Global English Edition (v3.0.1) | GitHub Raw | [**👉 Install ig_maxpland_en.user.js**](https://raw.githubusercontent.com/Stxyu-p/ig-maxpland/main/ig_maxpland_en.user.js) |
+| 🌐 **Userscript** | Global English Edition (v3.2.0) | Greasy Fork | [**👉 Install IG MaxPland**](https://greasyfork.org/en/scripts/595787-ig-maxpland) |
+| 📦 **Direct** | Global English Edition (v3.2.0) | GitHub Raw | [**👉 Install ig_maxpland_en.user.js**](https://raw.githubusercontent.com/Stxyu-p/ig-maxpland/main/ig_maxpland_en.user.js) |
 
 *Requires a userscript manager such as [Tampermonkey](https://www.tampermonkey.net/) (recommended) or [Violentmonkey](https://violentmonkey.github.io/).*
 
@@ -61,7 +61,7 @@ IG MaxPland operates under five strict engineering constraints:
 | **Inactive Account Radar** | ❌ None | ❌ None | ✅ **Safe 20/batch Deep Post Timestamps** |
 | **Account Health Dashboard** | ❌ None | ⚠️ Paid cloud subscription | ✅ **Local Snapshot Diff & SVG Sparklines** |
 | **Unfollow Protection** | ❌ None | ❌ None | ✅ **Starred Whitelist + JSON Portability** |
-| **Anti-Detection Pacing** | ❌ Fixed rapid spam (high ban risk) | ❌ Automated loop | ✅ **Randomized 15-30 s writes, two-tier rate limiting** |
+| **Anti-Detection Pacing** | ❌ Fixed rapid spam (high ban risk) | ❌ Automated loop | ✅ **Randomized 15-30 s writes, daily write ceiling, two-tier rate limiting** |
 | **In-Feed Media Downloader** | ⚠️ Watermarked or downscaled | ⚠️ Heavy memory-leaking ZIPs | ✅ **Direct 1-Click Stream to Disk** |
 | **External Dependencies** | ❌ jQuery, Lodash, external CDNs | ❌ Multi-megabyte bundles | ✅ **Zero Dependencies (Pure Vanilla JS)** |
 
@@ -142,12 +142,14 @@ Comprehensive audit of reciprocal relationships with defensive unfollowing prote
 | **Fans** | Accounts following you whom you do not follow back | Inspect / Whitelist |
 | **Mutual Friends** | Reciprocal contacts | Protected by default |
 | **Recently Lost** | Unfollowers detected between historical snapshots | Historical Diff Log |
+| **Lost 30d** | Everyone lost across every retained scan cycle, with the date each loss was detected | 30-day churn view + export |
 | **Ghost Accounts** | Followers with no avatar picture | Safe Segmentation |
 | **Inactive Radar** | Accounts exceeding your dormancy threshold | Filtered Selection |
 
 #### 🛡️ Unfollow Safety Safeguards
 - **Starred Whitelist (⭐):** Lock friends or creators to permanently prevent accidental unfollows across all interfaces.
 - **Humanized Jitter Pacing:** Randomized 15-30 s between every unfollow, batch or row-by-row, with a visible refusal message when you click too soon.
+- **Daily Unfollow Ceiling:** A hard 180/day stop (90 / 300 / off, configurable in Settings) refuses the write once reached instead of letting jitter be the only brake. The batch keeps its remaining selections pending.
 - **Server Confirmation Enforcement:** Unfollow actions are committed only after verified HTTP 200 responses; ambiguous failures immediately abort the queue.
 - **Two-Tier Rate Limiting:** Ordinary 429s cool down for 10 minutes and resume automatically. Only a real Instagram block (`feedback_required` / `sentry_block`) latches a 6-hour hold that survives a page refresh and is cleared from Settings.
 - **JSON Portability:** Export and import your whitelist configuration across browsers and machines.
@@ -207,6 +209,7 @@ Meta deploys machine-learning anomaly detectors on Instagram Web to flag automat
 | **Relationship scan (Safe)** | 6–12 s per page | Includes 60–120 s rest window every 30 pages |
 | **Relationship scan (Balanced / Fast)** | 3–6 s / 1.5–3 s per page | Fast modes enforce user confirmation prompts |
 | **Unfollow (batch and row)** | **15–30 s** | Strictly randomized per individual account action |
+| **Unfollow (daily ceiling)** | **180/day** | Hard stop at the action boundary; configurable 90 / 180 / 300 / off |
 | **Inactive radar** | 3.5–6 s | Staggered activity checks |
 | **Media download queue** | 1.8–3 s | Paced CDN resource retrieval |
 
@@ -221,7 +224,8 @@ Meta deploys machine-learning anomaly detectors on Instagram Web to flag automat
 | `ig_maxpland_en.user.js` | Root copy of the bundle (userscript install target) |
 | `test/fixture/` | Local API fixture used for browser testing |
 | `build.js` | Zero-dependency build pipeline (header + src) |
-| `round1.check.cjs` | 51-invariant regression suite, run against `dist` |
+| `round1.check.cjs` | 64-invariant regression suite, run against `dist` |
+| `.github/workflows/ci.yml` | CI: build, run the suite, fail on `dist` drift from `src` |
 | `package.json` | Version and scripts |
 
 ---
@@ -236,6 +240,10 @@ npm test
 
 # Run the invariant suite on the bundle
 npm run test:bundle
+
+# Build + suite in one shot, then fail if dist/ or the root copy drifted from src
+npm run verify
+npm run check:drift
 
 # Development mode (watch and rebuild on file change)
 npm run dev

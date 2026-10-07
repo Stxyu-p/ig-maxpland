@@ -1,0 +1,31 @@
+## Builds the shipped userscript, runs the invariant checks, and refuses drift.
+## The repo commits both dist/ig_maxpland_en.user.js and the root install copy, and
+## @downloadURL points at main — so a src/ change without a rebuild would be shipped
+## to every auto-updating install. The last step is the gate for exactly that.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # No dependencies: the build, the fixture, and the checks are Node stdlib only.
+      - name: Build the userscript
+        run: npm run build
+
+      - name: Run invariant checks
+        run: npm test
+
+      - name: Fail if dist/ or the root install copy drifted from src/
+        run: git diff --exit-code -- dist/ig_maxpland_en.user.js ig_maxpland_en.user.js

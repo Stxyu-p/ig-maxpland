@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         IG MaxPland
 // @namespace    http://tampermonkey.net/
-// @version      3.0.1
+// @version      3.2.0
 // @description  Instagram Relationship Scanner & Comprehensive Media Downloader
 // @author       P Choke & SORA
 // @match        https://*.instagram.com/*
@@ -36,7 +36,8 @@
     const APP_CONFIG = {
         APP_NAME: 'IG MaxPland',
         DB_NAME: 'IG_MAXPLAND_VAULT',
-        DB_VERSION: 6,
+        DB_VERSION: 7,
+        SNAPSHOT_RETENTION: 30,
         PAGE_SIZE: 50,
         INSTAGRAM_WEB_APP_ID: '936619743392459',
         FOLLOWING_PAGE_SAFETY_LIMIT: 60,
@@ -580,6 +581,10 @@
                     if (!db.objectStoreNames.contains('whitelist')) {
                         db.createObjectStore('whitelist', { keyPath: 'id' });
                     }
+                    if (!db.objectStoreNames.contains('churn')) {
+                        // Lean per-cycle churn rows: ids and names only, never a full snapshot copy.
+                        db.createObjectStore('churn', { keyPath: 'timestamp' });
+                    }
                     if (!db.objectStoreNames.contains('media_vault')) {
                         const vault = db.createObjectStore('media_vault', { keyPath: 'key' });
                         vault.createIndex('downloaded_at', 'downloaded_at', { unique: false });
@@ -689,6 +694,24 @@
                     following_usernames: Object.fromEntries(following.map(u => [String(u.pk || u.pk_id || u.id), String(u.username || '')]).filter(pair => pair[1]))
                 };
                 store.put(snap);
+                // Retention: keep the store bounded. The newest RETENTION complete snapshots per account survive;
+                // older ones are dropped in the same transaction so a long-lived install cannot grow forever.
+                if (typeof store.openCursor === 'function' && typeof store.delete === 'function') {
+                    const keep = Math.max(1, Math.floor(Number(APP_CONFIG.SNAPSHOT_RETENTION) || 30));
+                    let seenAccount = 0;
+                    const scan = store.openCursor(null, 'prev');
+                    scan.onsuccess = e => {
+                        const cursor = e.target.result;
+                        if (!cursor) return;
+                        const sameAccount = !accountId || String(cursor.value?.account_id) === String(accountId);
+                        if (sameAccount) {
+                            seenAccount++;
+                            if (seenAccount > keep) { try { cursor.delete(); } catch (_) {} }
+                        }
+                        cursor.continue();
+                    };
+                    scan.onerror = () => {};
+                }
                 tx.oncomplete = () => { cleanup(); resolve(snap); };
                 tx.onerror = () => { cleanup(); reject(tx.error || new Error('Snapshot write failed')); };
                 tx.onabort = () => { cleanup(); reject(signal?.aborted ? new DOMException('Scan aborted by user', 'AbortError') : tx.error || new Error('Snapshot transaction aborted')); };
@@ -775,6 +798,61 @@
                     }
                 };
                 req.onerror = () => resolve([]);
+            });
+        }
+
+        // Churn history lives beside snapshots: one row is ~1 KB of ids and names instead of a
+        // ~500 KB snapshot, so a 30-cycle view reads ~30 KB rather than ~15 MB of JSON.
+        static async getChurnHistory(accountId = null, limit = 30) {
+            const db = await this.init();
+            return new Promise((resolve) => {
+                const tx = db.transaction('churn', 'readonly');
+                const store = tx.objectStore('churn');
+                const req = store.openCursor(null, 'prev');
+                const list = [];
+                req.onsuccess = (e) => {
+                    const cursor = e.target.result;
+                    if (cursor && list.length < limit) {
+                        if (!accountId || String(cursor.value.account_id) === String(accountId)) list.push(cursor.value);
+                        cursor.continue();
+                    } else {
+                        resolve(list);
+                    }
+                };
+                req.onerror = () => resolve([]);
+            });
+        }
+
+        static async saveChurn(record, accountId = null, signal = null) {
+            const db = await this.init();
+            IgBridge.assertAccount(accountId);
+            if (signal?.aborted) throw new DOMException('Scan aborted by user', 'AbortError');
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction('churn', 'readwrite');
+                const abort = () => { try { tx.abort(); } catch (_) {} };
+                signal?.addEventListener('abort', abort, { once: true });
+                const cleanup = () => signal?.removeEventListener('abort', abort);
+                const store = tx.objectStore('churn');
+                store.put({ ...record, timestamp: Date.now(), account_id: accountId ? String(accountId) : null });
+                if (typeof store.openCursor === 'function' && typeof store.delete === 'function') {
+                    const keep = Math.max(1, Math.floor(Number(APP_CONFIG.SNAPSHOT_RETENTION) || 30));
+                    let seenAccount = 0;
+                    const scan = store.openCursor(null, 'prev');
+                    scan.onsuccess = e => {
+                        const cursor = e.target.result;
+                        if (!cursor) return;
+                        const sameAccount = !accountId || String(cursor.value?.account_id) === String(accountId);
+                        if (sameAccount) {
+                            seenAccount++;
+                            if (seenAccount > keep) { try { cursor.delete(); } catch (_) {} }
+                        }
+                        cursor.continue();
+                    };
+                    scan.onerror = () => {};
+                }
+                tx.oncomplete = () => { cleanup(); resolve(); };
+                tx.onerror = () => { cleanup(); reject(tx.error || new Error('Churn write failed')); };
+                tx.onabort = () => { cleanup(); reject(signal?.aborted ? new DOMException('Scan aborted by user', 'AbortError') : tx.error || new Error('Churn transaction aborted')); };
             });
         }
 
@@ -968,7 +1046,7 @@ static async fetchStoryViewers(mediaId) {
         }
 
         static isSessionError(err) {
-            return ['AUTH', 'CHECKPOINT', 'RATE_LIMIT', 'ACCOUNT_CHANGED', 'BLOCKED'].includes(err?.code);
+            return ['AUTH', 'CHECKPOINT', 'RATE_LIMIT', 'ACCOUNT_CHANGED', 'BLOCKED', 'DAILY_CAP'].includes(err?.code);
         }
 
         static async request(url, options = {}) {
@@ -1069,6 +1147,8 @@ static async fetchStoryViewers(mediaId) {
             if (!/^\d+$/.test(uid)) throw new Error('Invalid User ID to unfollow');
             const user = STATE.following.find(u => String(u.id || u.pk_id || u.pk || '') === uid);
             if (isProtectedUser(uid, user?.username)) throw new Error('This account is in the Whitelist');
+            const budget = budgetState();
+            if (budget.blocked) throw this.error(`Daily unfollow ceiling reached (${budget.used.toLocaleString()}/${budget.cap.toLocaleString()}). Raise it in Settings or wait until tomorrow.`, 'DAILY_CAP');
             const accountId = STATE.relationshipAccountId || this.getCookie('ds_user_id');
             this.assertAccount(accountId);
             const csrf = this.getCookie('csrftoken');
@@ -1124,17 +1204,53 @@ static async fetchStoryViewers(mediaId) {
             const RESUME_KEY = `mp_scan_resume_${endpoint}`;
             let savedResume = null;
             try { savedResume = JSON.parse(localStorage.getItem(RESUME_KEY) || 'null'); } catch (_) {}
-            if (savedResume && String(savedResume.userId) === String(userId) && Array.isArray(savedResume.users) && savedResume.cursor) {
+            const resumeLimit = Math.max(1, Math.min(250, Number(pageSafetyLimit) || 250));
+            if (savedResume && savedResume.userId && String(savedResume.userId) !== String(userId)) {
+                // Another account's checkpoint is useless here; drop it instead of letting it pile up.
+                try { localStorage.removeItem(RESUME_KEY); } catch (_) {}
+                savedResume = null;
+            }
+            if (savedResume) {
+                const age = Date.now() - (Number(savedResume.savedAt) || 0);
+                const resumable = Array.isArray(savedResume.users) && savedResume.cursor;
+                const atCap = (Number(savedResume.pagesFetched) || 0) >= resumeLimit;
+                if (!resumable || atCap || age > 24 * 3600 * 1000) {
+                    // A checkpoint already at the page cap can only re-fail forever, and a stale one
+                    // resumes a days-old picture. Drop both so the next scan starts clean.
+                    try { localStorage.removeItem(RESUME_KEY); } catch (_) {}
+                    savedResume = null;
+                    onProgress?.(0, 0, atCap
+                        ? 'Saved scan already reached the page limit — starting fresh'
+                        : 'Saved scan checkpoint was stale — starting fresh');
+                }
+            }
+            if (savedResume) {
                 for (const u of savedResume.users) {
                     if (!seenUsers.has(String(u.id))) { seenUsers.add(String(u.id)); all.push(u); }
                 }
                 cursor = String(savedResume.cursor);
                 transport = savedResume.transport === 'graphql' ? 'graphql' : 'rest';
                 all.pagesFetched = Number(savedResume.pagesFetched) || 0;
+                STATE.scanResumedFrom = all.pagesFetched;
                 onProgress?.(all.length, all.pagesFetched, `Resumed saved scan at page ${all.pagesFetched} (${all.length.toLocaleString()} users kept)`);
             }
             const signal = STATE.scanController?.signal;
             const limit = Math.max(1, Math.min(250, Number(pageSafetyLimit) || 250));
+
+            // ponytail: checkpoint every 5th page (or 20s), not every page. Rewriting the whole accumulated
+            // list per page rewrote ~1 MB to localStorage every few seconds at 12k users and, once the quota
+            // tripped, silently disabled resume for the rest of the session.
+            let resumeDisabled = false;
+            let lastResumeAt = 0;
+            const writeResume = (force = false) => {
+                if (resumeDisabled || !cursor) return;
+                const now = Date.now();
+                if (!force && all.pagesFetched > 1 && all.pagesFetched % 5 !== 0 && now - lastResumeAt < 20000) return;
+                lastResumeAt = now;
+                try {
+                    localStorage.setItem(RESUME_KEY, JSON.stringify({ userId: String(userId), cursor, transport, pagesFetched: all.pagesFetched, users: all, savedAt: Date.now() }));
+                } catch (_) { resumeDisabled = true; }
+            };
             const fetchStats = { requestMs: 0, waitMs: 0 };
             const PACE_PRESETS = {
                 A: { page: [6000, 12000], restEvery: 30, rest: [60000, 120000] },
@@ -1196,9 +1312,7 @@ static async fetchStoryViewers(mediaId) {
                     if (all.pagesFetched >= limit) throw new Error(`Safety page limit reached (${limit} pages)`);
                     seenCursors.add(next);
                     cursor = next;
-                    try {
-                        localStorage.setItem(RESUME_KEY, JSON.stringify({ userId: String(userId), cursor, transport, pagesFetched: all.pagesFetched, users: all }));
-                    } catch (_) { /* quota exceeded: resume survives only while storage allows */ }
+                    writeResume();
                     const pause = PACE.page[0] + Math.floor(Math.random() * (PACE.page[1] - PACE.page[0]));
                     const tw = performance.now();
                     for (let ms = 0; ms < pause && !STATE.stopScanFlag && !signal?.aborted; ms += 250) await sleep(250);
@@ -1212,6 +1326,7 @@ static async fetchStoryViewers(mediaId) {
                 }
             } catch (err) {
                 all.lastError = err;
+                writeResume(true); // a rate-limited or aborted scan must resume from its last good page
                 onProgress?.(all.length, all.pagesFetched, err.message);
             }
             all.fetchStats = fetchStats;
@@ -1302,7 +1417,8 @@ static async fetchStoryViewers(mediaId) {
         quickDownloadFeed: true,
         quickDownloadStory: true,
         inactiveThresholdDays: 180,
-        scanSpeed: 'A'
+        scanSpeed: 'A',
+        dailyUnfollowCap: 180
     };
 
     function loadPrefs() {
@@ -1319,13 +1435,42 @@ static async fetchStoryViewers(mediaId) {
         } catch (_) {}
     }
 
-    // ponytail: no cap by owner decision; the 15-30s delay is the only brake. Add a ceiling if asked again.
+    // ponytail: capped at 180/day on owner request (2026-10-07); set the pref to 0 for delay-only behavior.
+    function getDailyUnfollowCap() {
+        const cap = Number(STATE.prefs ? STATE.prefs.dailyUnfollowCap : undefined);
+        return Number.isFinite(cap) && cap >= 0 ? Math.floor(cap) : DEFAULT_PREFS.dailyUnfollowCap;
+    }
+    function budgetState() {
+        const used = getWriteBudget().daily;
+        const cap = getDailyUnfollowCap();
+        return { used, cap, blocked: cap > 0 && used >= cap };
+    }
+    // The ceiling is a daily budget for the person holding the phone, so it must roll over at their
+    // local midnight. A UTC key reset it at 07:00 in UTC+7, which quietly handed out two quota
+    // windows per local day.
+    function localDayKey(date = new Date()) {
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${date.getFullYear()}-${month}-${day}`;
+    }
     function getWriteBudget() {
-        const day = new Date().toISOString().slice(0, 10);
+        const day = localDayKey();
+        const legacyUtcDay = new Date().toISOString().slice(0, 10);
         let saved = null;
         try { saved = JSON.parse(localStorage.getItem(WRITE_BUDGET_KEY)); } catch (_) {}
-        if (!saved || saved.day !== day) saved = { day, daily: 0 };
-        return saved;
+        const sameLocalDay = Boolean(saved) && saved.day === day;
+        // Pre-3.2 counters carried no tz marker and were keyed by the UTC date. Keep such a counter
+        // while its UTC day is still today (the upgrade day may run a few hours strict, never loose),
+        // then adopt the local key for good.
+        const sameLegacyDay = Boolean(saved) && saved.tz !== 'local' && saved.day === legacyUtcDay;
+        if (!sameLocalDay && !sameLegacyDay) return { day, daily: 0, tz: 'local' };
+        return { day, daily: Number(saved.daily) || 0, tz: 'local' };
+    }
+    function clearResumeCheckpoints() {
+        for (const endpoint of ['followers', 'following']) {
+            try { localStorage.removeItem(`mp_scan_resume_${endpoint}`); } catch (_) {}
+        }
+        STATE.scanResumedFrom = 0;
     }
     function noteWrite() {
         const b = getWriteBudget();
@@ -1336,7 +1481,9 @@ static async fetchStoryViewers(mediaId) {
         try { localStorage.removeItem(WRITE_BUDGET_KEY); } catch (_) {}
     }
     function formatBudget() {
-        return `${getWriteBudget().daily.toLocaleString()} unfollowed today`;
+        const { used, cap, blocked } = budgetState();
+        if (!cap) return `${used.toLocaleString()} unfollowed today · ceiling off`;
+        return `${used.toLocaleString()} / ${cap.toLocaleString()} unfollowed today${blocked ? ' · ceiling reached' : ''}`;
     }
 
     const STATE = {
@@ -1361,6 +1508,10 @@ static async fetchStoryViewers(mediaId) {
         activeTab: 'relationship',
         relationshipFilter: 'not_following_back',
         searchQuery: '',
+        searchRenderTimer: null,
+        scanResumedFrom: 0,
+        churnLost30: [],
+        churnCycles: 0,
         relationshipLimit: 100,
         subFilters: {
             excludeVerified: false,
@@ -1729,6 +1880,7 @@ const overlay = document.createElement('div');
                         <span id="maxpland-scan-stat-timer">⏱️ 00:00</span>
                         <button type="button" class="maxpland-btn-secondary" id="maxpland-btn-pause-scan" style="display:none" title="Pause the running scan; progress is saved page by page">⏸ Pause</button>
                         <button type="button" class="maxpland-btn-danger" id="maxpland-btn-stop-scan">${ICONS.STOP} Stop</button>
+                        <button type="button" class="maxpland-btn-secondary" id="maxpland-btn-fresh-scan" style="display:none" title="Discard the saved scan checkpoint and start again from page 1">↺ Start fresh</button>
                     </div>
                 </div>
                 <div class="maxpland-progress-track">
@@ -1792,6 +1944,9 @@ const overlay = document.createElement('div');
                             </button>
                             <button class="maxpland-pill-btn" data-filter="inactive">
                                 ⏱️ Inactive <span class="maxpland-pill-count" id="pill-count-inactive">-</span>
+                            </button>
+                            <button class="maxpland-pill-btn" data-filter="churn">
+                                🔻 Lost 30d <span class="maxpland-pill-count" id="pill-count-churn">-</span>
                             </button>
                             <button class="maxpland-pill-btn" data-filter="whitelist">
                                 ⭐ Whitelist <span class="maxpland-pill-count" id="pill-count-white">-</span>
@@ -2052,6 +2207,18 @@ const overlay = document.createElement('div');
                             </div>
                             <span style="font-size:12px;font-weight:600;color:var(--mp-blue);">60 pages (3,000 users) / 250 pages (12,500 users)</span>
                         </div>
+                        <div class="maxpland-settings-row">
+                            <div>
+                                <div style="font-weight:600;font-size:13px;">Daily Unfollow Ceiling</div>
+                                <div style="font-size:11.5px;color:var(--mp-text-muted);">Hard stop for write actions per day. Once reached, every unfollow path refuses instead of letting the jitter delay be the only brake.</div>
+                            </div>
+                            <select id="pref-setting-daily-cap" class="maxpland-select" aria-label="Daily unfollow ceiling">
+                                <option value="90">90 / day (strict)</option>
+                                <option value="180">180 / day (recommended)</option>
+                                <option value="300">300 / day (aggressive)</option>
+                                <option value="0">No ceiling (delay only)</option>
+                            </select>
+                        </div>
                     </div>
 
                     <div class="maxpland-settings-group">
@@ -2117,7 +2284,7 @@ const overlay = document.createElement('div');
             </div>
 
             <div class="maxpland-footer">
-                <span>MaxPland v3.0.1 · Clean Minimal Precision (Anti-Slop)</span>
+                <span>MaxPland v3.2.0 · Clean Minimal Precision (Anti-Slop)</span>
                 <span>Toggle <kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>M</kbd></span>
             </div>
         `;
@@ -2298,6 +2465,7 @@ let isPointerDown = false;
                 STATE.selectedIds.clear();
                 updateBulkActionBar();
                 renderRelationshipList();
+                if (STATE.relationshipFilter === 'churn') loadChurnHistory();
             });
         });
 
@@ -2343,7 +2511,9 @@ let isPointerDown = false;
 
         document.getElementById('maxpland-user-search').addEventListener('input', (e) => {
             STATE.searchQuery = e.target.value.trim().toLowerCase();
-            renderRelationshipList();
+            // ponytail: coalesce keystrokes — each render filters the whole pool and rebuilds up to the row limit.
+            clearTimeout(STATE.searchRenderTimer);
+            STATE.searchRenderTimer = setTimeout(() => { STATE.searchRenderTimer = null; renderRelationshipList(); }, 120);
         });
 
         document.getElementById('maxpland-btn-scan-relationships').addEventListener('click', runRelationshipScan);
@@ -2360,6 +2530,14 @@ let isPointerDown = false;
             const pb = document.getElementById('maxpland-btn-pause-scan');
             pb.textContent = STATE.scanPaused ? '▶ Resume' : '⏸ Pause';
             document.getElementById('maxpland-scan-phase').textContent = STATE.scanPaused ? 'Scan paused — progress saved page by page' : 'Fetching relationship pages...';
+        });
+        document.getElementById('maxpland-btn-fresh-scan').addEventListener('click', () => {
+            // Escape hatch: a checkpoint the user no longer trusts must not require clearing site data.
+            clearResumeCheckpoints();
+            STATE.stopScanFlag = true;
+            STATE.scanPaused = false;
+            STATE.scanController?.abort();
+            showToast('Saved scan checkpoint discarded — press Scan Relationships to start from page 1', 5000);
         });
 
         document.getElementById('maxpland-btn-backup-whitelist').addEventListener('click', exportWhitelistBackup);
@@ -2435,6 +2613,16 @@ let isPointerDown = false;
                 STATE.prefs.scanSpeed = e.target.value;
                 savePrefs(STATE.prefs);
                 showToast(`Scan speed set to mode ${e.target.value}`);
+            });
+        }
+        const selCap = document.getElementById('pref-setting-daily-cap');
+        if (selCap) {
+            selCap.addEventListener('change', (e) => {
+                STATE.prefs.dailyUnfollowCap = Math.max(0, Number(e.target.value) || 0);
+                savePrefs(STATE.prefs);
+                const bl = document.getElementById('maxpland-budget-label');
+                if (bl) bl.textContent = formatBudget();
+                showToast(STATE.prefs.dailyUnfollowCap ? `Daily unfollow ceiling set to ${STATE.prefs.dailyUnfollowCap}` : 'Daily unfollow ceiling disabled');
             });
         }
         const btnSettingBackup = document.getElementById('setting-btn-backup-whitelist');
@@ -2524,6 +2712,8 @@ const btnScanInactive = document.getElementById('maxpland-btn-scan-inactive');
                     }
                     const uid = btn.dataset.id;
                     const uname = btn.dataset.user;
+                    const cap = budgetState();
+                    if (cap.blocked) { showToast(`⛔ Daily unfollow ceiling reached (${cap.used}/${cap.cap}) — raise it in Settings or wait until tomorrow`, 5000); return; }
                     if (!confirm(`Are you sure you want to unfollow @${uname}?`)) return;
 
                     STATE.isUnfollowing = true;
@@ -2696,7 +2886,7 @@ const btnScanInactive = document.getElementById('maxpland-btn-scan-inactive');
         for (const key of ['followers','following','notFollowingBack','fans','mutual','lostFollowers','ghostFollowers','renamed']) STATE[key] = [];
         STATE.selectedIds.clear();
         updateBulkActionBar();
-        for (const id of ['stat-not-following-back','stat-fans','stat-mutual','stat-lost','stat-ghost','pill-count-not','pill-count-fans','pill-count-mutual','pill-count-lost','pill-count-ghost','pill-count-renamed']) {
+        for (const id of ['stat-not-following-back','stat-fans','stat-mutual','stat-lost','stat-ghost','pill-count-not','pill-count-fans','pill-count-mutual','pill-count-lost','pill-count-ghost','pill-count-renamed','pill-count-churn']) {
             if (el(id)) el(id).textContent = '-';
         }
         renderRelationshipList();
@@ -2708,6 +2898,9 @@ const btnScanInactive = document.getElementById('maxpland-btn-scan-inactive');
             const pauseBtn = document.getElementById('maxpland-btn-pause-scan');
             pauseBtn.style.display = '';
             pauseBtn.textContent = '⏸ Pause';
+            STATE.scanResumedFrom = 0;
+            const freshBtn = document.getElementById('maxpland-btn-fresh-scan');
+            if (freshBtn) freshBtn.style.display = 'none';
             phase.textContent = 'Verifying account...';
             notice.style.display = 'none';
             summary.textContent = '';
@@ -2732,6 +2925,8 @@ const btnScanInactive = document.getElementById('maxpland-btn-scan-inactive');
                         el('maxpland-scan-stat-page').textContent = `Pages: ${page}`;
                         el('maxpland-progress-fill').style.width = `${Math.min(95, Math.min(45, page * 3) + (lists.followers ? 45 : 0) + (lists.following ? 45 : 0))}%`;
                         if (message) { notice.textContent = message; notice.style.display = 'block'; }
+                        if (!STATE.scanResumedFrom && freshBtn) freshBtn.style.display = 'none';
+                        else if (freshBtn) freshBtn.style.display = '';
                     }, speedMode);
             };
             const finishList = (endpoint, result) => {
@@ -2816,6 +3011,32 @@ const btnScanInactive = document.getElementById('maxpland-btn-scan-inactive');
             await MaxPlandVault.saveSnapshot(followers, following, currentUser.id, STATE.scanController.signal);
             IgBridge.assertAccount(currentUser.id);
             if (STATE.stopScanFlag) throw new DOMException('Scan aborted by user', 'AbortError');
+            // Churn history (v3.2): a compact per-cycle record so the 30-day view never has to
+            // re-read 30 full snapshots. History is a bonus, so a vault failure must not fail the scan.
+            try {
+                const history = await MaxPlandVault.getChurnHistory(currentUser.id, APP_CONFIG.SNAPSHOT_RETENTION - 1);
+                const everLost = new Map();
+                for (const cycle of history) for (const entry of cycle.lost || []) if (!everLost.has(String(entry.id))) everLost.set(String(entry.id), entry.username || '');
+                const prevFollowerIds = new Set((prev?.follower_ids || []).map(String));
+                const rejoined = followers
+                    .filter(u => { const id = getUid(u); return Boolean(id) && !prevFollowerIds.has(id) && everLost.has(id); })
+                    .map(u => ({ id: getUid(u), username: u.username || '' }));
+                const cap = 1000;
+                const churnRecord = {
+                    lost: lostFollowers.slice(0, cap).map(u => ({ id: String(u.id), username: u.username || '' })),
+                    rejoined: rejoined.slice(0, cap),
+                    renamed: renamed.slice(0, cap).map(u => ({ id: String(u.id), to: u.username || '' })),
+                    truncated: lostFollowers.length > cap || rejoined.length > cap || renamed.length > cap,
+                    follower_count: followers.length,
+                    following_count: following.length
+                };
+                await MaxPlandVault.saveChurn(churnRecord, currentUser.id, STATE.scanController.signal);
+                const cycles = [{ ...churnRecord, timestamp: Date.now() }, ...history];
+                STATE.churnLost30 = flattenChurnLost(cycles);
+                STATE.churnCycles = cycles.length;
+            } catch (err) {
+                console.warn('[MaxPland] Churn history unavailable', err);
+            }
             Object.assign(STATE, { followers, following, whitelist, lostFollowers, renamed, scanIncomplete: false,
                 notFollowingBack: following.filter(u => !isFollower(u)),
                 fans: followers.filter(u => !isFollowing(u)),
@@ -2825,6 +3046,7 @@ const btnScanInactive = document.getElementById('maxpland-btn-scan-inactive');
                 if (el(`stat-${stat}`)) el(`stat-${stat}`).textContent = STATE[key].length.toLocaleString();
                 if (el(`pill-count-${pill}`)) el(`pill-count-${pill}`).textContent = STATE[key].length.toLocaleString();
             }
+            if (el('pill-count-churn')) el('pill-count-churn').textContent = (STATE.churnLost30 || []).length.toLocaleString();
             el('pill-count-white').textContent = whitelist.size.toLocaleString();
             el('maxpland-progress-fill').style.width = '100%';
             phase.textContent = 'Scan completed';
@@ -2851,6 +3073,8 @@ const btnScanInactive = document.getElementById('maxpland-btn-scan-inactive');
             const pauseBtnEnd = document.getElementById('maxpland-btn-pause-scan');
             pauseBtnEnd.style.display = 'none';
             pauseBtnEnd.textContent = '⏸ Pause';
+            const freshBtnEnd = document.getElementById('maxpland-btn-fresh-scan');
+            if (freshBtnEnd) freshBtnEnd.style.display = 'none';
             renderRelationshipList();
         
             if (!STATE.scanIncomplete) STATE.progressHideTimer = setTimeout(() => { progress.style.display = 'none'; }, 2500);
@@ -2872,6 +3096,39 @@ const btnScanInactive = document.getElementById('maxpland-btn-scan-inactive');
         return followedIdIndex;
     }
 
+    // One row per account lost across the retained cycles; the newest detection wins.
+    function flattenChurnLost(cycles) {
+        const byId = new Map();
+        for (const cycle of cycles || []) {
+            for (const entry of cycle.lost || []) {
+                const id = String(entry.id || '');
+                if (!id || byId.has(id)) continue;
+                byId.set(id, {
+                    id, pk: id,
+                    username: entry.username || `user_${id}`,
+                    full_name: `Unfollowed · detected ${new Date(cycle.timestamp).toLocaleDateString()}`,
+                    profile_pic_url: '',
+                    churn_detected_at: cycle.timestamp
+                });
+            }
+        }
+        return [...byId.values()];
+    }
+
+    async function loadChurnHistory() {
+        try {
+            const accountId = STATE.relationshipAccountId || (await IgBridge.resolveCurrentUser()).id;
+            const cycles = await MaxPlandVault.getChurnHistory(accountId, APP_CONFIG.SNAPSHOT_RETENTION);
+            STATE.churnLost30 = flattenChurnLost(cycles);
+            STATE.churnCycles = cycles.length;
+            const countEl = document.getElementById('pill-count-churn');
+            if (countEl) countEl.textContent = STATE.churnLost30.length.toLocaleString();
+            if (STATE.relationshipFilter === 'churn') renderRelationshipList();
+        } catch (err) {
+            console.warn('[MaxPland] Churn history unavailable', err);
+        }
+    }
+
     function getFilteredUsers() {
         let pool = [];
         if (STATE.relationshipFilter === 'not_following_back') pool = STATE.notFollowingBack;
@@ -2881,6 +3138,7 @@ const btnScanInactive = document.getElementById('maxpland-btn-scan-inactive');
         else if (STATE.relationshipFilter === 'ghost') pool = STATE.ghostFollowers;
         else if (STATE.relationshipFilter === 'renamed') pool = STATE.renamed || [];
         else if (STATE.relationshipFilter === 'inactive') pool = STATE.inactiveFollowing;
+        else if (STATE.relationshipFilter === 'churn') pool = STATE.churnLost30 || [];
         else if (STATE.relationshipFilter === 'whitelist') pool = Array.from(STATE.whitelist.values());
 
         const followedIds = getFollowedIdIndex();
@@ -2925,6 +3183,7 @@ const btnScanInactive = document.getElementById('maxpland-btn-scan-inactive');
         else if (STATE.relationshipFilter === 'lost') { tagClass = 'lost'; tagText = 'Lost'; }
         else if (STATE.relationshipFilter === 'ghost') { tagClass = 'ghost'; tagText = '👻 Ghost'; }
         else if (STATE.relationshipFilter === 'inactive') { tagClass = 'ghost'; tagText = '⏱️ Inactive'; }
+        else if (STATE.relationshipFilter === 'churn') { tagClass = 'lost'; tagText = '🔻 Lost 30d'; }
         else if (STATE.relationshipFilter === 'whitelist') { tagClass = 'mutual'; tagText = '⭐ Whitelist'; }
 
         if (STATE.scanIncomplete && STATE.followers.length === 0 && (STATE.relationshipFilter === 'not_following_back' || STATE.relationshipFilter === 'mutual' || STATE.relationshipFilter === 'fans')) {
@@ -3110,6 +3369,12 @@ const btnScanInactive = document.getElementById('maxpland-btn-scan-inactive');
                     STATE.selectedIds.delete(uid);
                     applyUnfollowResult(uid, userObj?.username);
                 } catch (err) {
+                    // A ceiling stop is a planned brake, not a failed unfollow: report it and keep the rest pending.
+                    if (err?.code === 'DAILY_CAP') {
+                        noticeEl.textContent = err.message;
+                        noticeEl.style.display = 'block';
+                        break;
+                    }
                     console.error('[Unfollow Error]', uid, err);
                     failCount++;
                     noticeEl.textContent = err.message || 'Unfollow failed';
@@ -3297,6 +3562,7 @@ const btnScanInactive = document.getElementById('maxpland-btn-scan-inactive');
         const p = STATE.prefs || {};
         if (el('pref-setting-inactive-threshold')) el('pref-setting-inactive-threshold').value = String(p.inactiveThresholdDays || 180);
         if (el('pref-setting-scan-speed')) el('pref-setting-scan-speed').value = ['B', 'C'].includes(p.scanSpeed) ? p.scanSpeed : 'A';
+        if (el('pref-setting-daily-cap')) el('pref-setting-daily-cap').value = String(getDailyUnfollowCap());
     }
 
     async function runInactiveScan() {
@@ -4186,6 +4452,11 @@ function injectProfileAvatarBadge() {
        12. INITIALIZATION
        ========================================================================== */
 
+    // ponytail: one failing page injector must not take the toolbar, badge and observer down with it.
+    function safeStep(label, fn) {
+        try { return fn(); } catch (err) { console.warn(`[MaxPland] ${label} failed`, err); return null; }
+    }
+
     async function init() {
         if (document.getElementById('maxpland-trigger-btn')) return;
         createUI();
@@ -4207,8 +4478,8 @@ function injectProfileAvatarBadge() {
             console.warn('[MaxPland] Local vault unavailable', err);
         }
 
-        installStorySeenInterceptor();
-        applyCleanFeedMode();
+        safeStep('stealth interceptor', () => installStorySeenInterceptor());
+        safeStep('clean feed', () => applyCleanFeedMode());
     
         IgBridge.restoreHardBlock();
         const blockRow = document.getElementById('maxpland-block-row');
@@ -4216,11 +4487,11 @@ function injectProfileAvatarBadge() {
         const budgetLabel = document.getElementById('maxpland-budget-label');
         if (budgetLabel) budgetLabel.textContent = formatBudget();
 
-        injectInFeedDownloadButtons();
-        injectStoryBar();
-        injectProfileAvatarBadge();
-        startPageObserver();
-        document.addEventListener('click', () => closeAllMenus());
+        startPageObserver(); // first: the observer must survive any injector failure below
+        safeStep('feed tools', () => injectInFeedDownloadButtons());
+        safeStep('story bar', () => injectStoryBar());
+        safeStep('profile badge', () => injectProfileAvatarBadge());
+        safeStep('menu close listener', () => document.addEventListener('click', () => closeAllMenus()));
     }
 
     if (document.readyState === 'complete' || document.readyState === 'interactive') {

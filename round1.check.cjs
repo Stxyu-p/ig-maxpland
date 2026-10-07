@@ -79,7 +79,8 @@ function harness() {
             runBatchUnfollow, downloadResolvedMedia, renderRelationshipList, applyUnfollowResult,
             setFollowStateChip, injectStoryBar,
             getActiveStorySection, pickStoryMedia, resolveCurrentStoryMedia, installStorySeenInterceptor,
-            bindUIEvents, setSleep(fn) { sleep = fn; }, setDownload(fn) { gmDownload = fn; } };
+            bindUIEvents, safeStep, budgetState, formatBudget, localDayKey, getWriteBudget, noteWrite,
+            setSleep(fn) { sleep = fn; }, setDownload(fn) { gmDownload = fn; } };
     })();`, context);
     const api = context.api;
     api.setSleep(async () => {});
@@ -877,6 +878,246 @@ test('Export actions have a separate row after filters', () => {
     const [chips, actions] = filters.split('<div class="maxpland-export-actions"');
     assert.equal((chips.match(/id="toggle-filter-/g) || []).length, 6);
     assert.equal((actions.match(/id="maxpland-btn-(?:copy-usernames|export-csv|export-json)"/g) || []).length, 3);
+});
+
+test('Daily unfollow ceiling refuses the write at the action boundary', async () => {
+    const h = harness(); let requests = 0;
+    h.context.localStorage.setItem('maxpland_write_budget', JSON.stringify({ day: new Date().toISOString().slice(0, 10), daily: 180 }));
+    h.STATE.prefs.dailyUnfollowCap = 180;
+    h.STATE.following = [{ id: '2', username: 'a' }];
+    h.IgBridge.request = async () => { requests++; return { status: 'ok', friendship_status: { following: false } }; };
+    await assert.rejects(h.IgBridge.unfollowUser('2'), /ceiling/i);
+    assert.equal(requests, 0, 'a capped account must never reach Instagram');
+});
+
+test('Daily ceiling stops the batch and keeps pending selections', async () => {
+    const h = harness(); let requests = 0;
+    h.context.localStorage.setItem('maxpland_write_budget', JSON.stringify({ day: new Date().toISOString().slice(0, 10), daily: 181 }));
+    h.STATE.prefs.dailyUnfollowCap = 180;
+    h.STATE.selectedIds = new Set(['2', '3']);
+    h.STATE.following = [{ id: '2', username: 'a' }, { id: '3', username: 'b' }];
+    h.IgBridge.request = async () => { requests++; return { status: 'ok', friendship_status: { following: false } }; };
+    await h.runBatchUnfollow();
+    assert.equal(requests, 0, 'the batch must stop at the ceiling, not burn the remaining selections');
+    assert.equal(h.STATE.selectedIds.size, 2, 'pending work stays selected for after the ceiling is raised');
+});
+
+test('Daily ceiling of 0 keeps delay-only behavior, and the label reads the cap', () => {
+    const h = harness();
+    h.STATE.prefs.dailyUnfollowCap = 0;
+    h.context.localStorage.setItem('maxpland_write_budget', JSON.stringify({ day: new Date().toISOString().slice(0, 10), daily: 9999 }));
+    assert.equal(h.budgetState().blocked, false, 'ceiling off must not block writes');
+    assert.match(h.formatBudget(), /ceiling off/);
+    h.STATE.prefs.dailyUnfollowCap = 180;
+    assert.match(h.formatBudget(), /9,999 \/ 180 unfollowed today/);
+});
+
+test('Snapshot retention drops history beyond the newest 30 per account', async () => {
+    const h = harness();
+    // Object stores are separate in IndexedDB, so the fake must be name-aware: a churn write
+    // landing in the snapshot map would fake a prune failure.
+    const stores = { snapshots: new Map(), churn: new Map() };
+    const records = stores.snapshots;
+    for (let i = 0; i < 35; i++) records.set(1000 + i, { timestamp: 1000 + i, complete: true, account_id: '1' });
+    const deleted = [];
+    h.MaxPlandVault.init = async () => ({
+        transaction: (name = 'snapshots') => {
+            const records = stores[name] || (stores[name] = new Map());
+            const store = {
+                put(rec) { records.set(rec.timestamp, rec); },
+                delete(key) { deleted.push(key); records.delete(key); },
+                openCursor() {
+                    const keys = [...records.keys()].sort((a, b) => b - a);
+                    const req = {};
+                    let i = 0;
+                    const step = () => {
+                        if (i >= keys.length) { if (req.onsuccess) req.onsuccess({ target: { result: null } }); return; }
+                        const key = keys[i++];
+                        const cursor = { value: records.get(key), delete() { deleted.push(key); records.delete(key); },
+                            continue() { step(); } };
+                        if (req.onsuccess) req.onsuccess({ target: { result: cursor } });
+                    };
+                    setImmediate(step);
+                    return req;
+                }
+            };
+            const tx = { objectStore: () => store, abort() {}, addEventListener() {}, removeEventListener() {},
+                onerror: null, onabort: null,
+                set oncomplete(fn) { this._oc = fn; setImmediate(() => this._oc && this._oc()); },
+                get oncomplete() { return this._oc; } };
+            return tx;
+        }
+    });
+    h.IgBridge.resolveCurrentUser = async () => ({ id: '1', username: 'me' });
+    h.IgBridge.fetchAllRelationships = async endpoint => {
+        const list = []; list.completed = true;
+        if (endpoint === 'followers') list.push({ id: '2', username: 'aa' });
+        return list;
+    };
+    h.MaxPlandVault.getLatestSnapshot = async () => null;
+    h.MaxPlandVault.getWhitelist = async () => new Map();
+    await h.runRelationshipScan();
+    const kept = [...records.values()].filter(r => r.complete && r.account_id === '1');
+    assert.equal(kept.length, 30, 'the store stays bounded at the retention window');
+    assert.ok(deleted.length >= 6, 'the oldest snapshots are the ones dropped');
+    assert.equal(stores.churn.size, 1, 'the churn row is written to its own store, not the snapshot store');
+});
+
+test('Daily ceiling rolls over at local midnight, and legacy UTC counters survive the upgrade', () => {
+    const h = harness();
+    const KEY = 'maxpland_write_budget';
+    const local = h.localDayKey();
+    h.STATE.prefs.dailyUnfollowCap = 180;
+    h.context.localStorage.setItem(KEY, JSON.stringify({ day: local, daily: 179 }));
+    assert.equal(h.budgetState().blocked, false, 'a counter under the cap on the same local day is fine');
+    h.context.localStorage.setItem(KEY, JSON.stringify({ day: local, daily: 180 }));
+    assert.equal(h.budgetState().blocked, true, 'the ceiling blocks on the local day key');
+    // Pre-3.2 builds keyed the counter by the UTC date and carried no tz marker.
+    h.context.localStorage.setItem(KEY, JSON.stringify({ day: new Date().toISOString().slice(0, 10), daily: 400 }));
+    assert.equal(h.budgetState().blocked, true, 'a legacy UTC counter is adopted, never silently reset');
+    h.context.localStorage.setItem(KEY, JSON.stringify({ day: '1999-01-01', daily: 400, tz: 'local' }));
+    assert.equal(h.budgetState().blocked, false, 'yesterday does not carry into today');
+    h.noteWrite();
+    const saved = JSON.parse(h.context.localStorage.getItem(KEY));
+    assert.equal(saved.day, local, 'writes stamp the local date');
+    assert.equal(saved.tz, 'local', 'writes mark the key as local so it is never re-migrated');
+    assert.equal(saved.daily, 1);
+});
+
+test('A checkpoint parked at the page cap cannot deadlock the scanner', async () => {
+    const h = harness();
+    const KEY = 'mp_scan_resume_followers';
+    h.context.localStorage.setItem(KEY, JSON.stringify({ userId: '1', cursor: 'c5', transport: 'rest', pagesFetched: 2, users: [{ id: '1', username: 'u' }], savedAt: Date.now() }));
+    let page = 0;
+    h.IgBridge.fetchRelationshipPage = async () => {
+        page++;
+        return { users: [{ id: String(100 + page), username: 'x' }], has_more: page < 2, next_max_id: page < 2 ? 'c' + page : null };
+    };
+    const first = await h.IgBridge.fetchAllRelationships('followers', '1', 2, () => {});
+    assert.equal(first.completed, true, 'a capped checkpoint is dropped instead of re-failing forever');
+    assert.equal(h.STATE.scanResumedFrom, 0, 'a dropped checkpoint must not claim a resume');
+    assert.equal(h.context.localStorage.getItem(KEY), null, 'the poisoned checkpoint is gone after the scan completes');
+});
+
+test('A stale checkpoint is dropped, a fresh one resumes and reports its page', async () => {
+    const h = harness();
+    const KEY = 'mp_scan_resume_followers';
+    h.IgBridge.fetchRelationshipPage = async () => ({ users: [{ id: '9', username: 'y' }], has_more: false, next_max_id: null });
+    h.context.localStorage.setItem(KEY, JSON.stringify({ userId: '1', cursor: 'c5', transport: 'rest', pagesFetched: 1, users: [{ id: '7', username: 'kept' }], savedAt: Date.now() - 25 * 3600 * 1000 }));
+    const stale = await h.IgBridge.fetchAllRelationships('followers', '1', 60, () => {});
+    assert.equal(stale.length, 1, 'a 25h-old checkpoint must not seed the list');
+    assert.equal(h.STATE.scanResumedFrom, 0);
+    h.context.localStorage.setItem(KEY, JSON.stringify({ userId: '1', cursor: 'c5', transport: 'rest', pagesFetched: 3, users: [{ id: '7', username: 'kept' }], savedAt: Date.now() }));
+    const resumed = await h.IgBridge.fetchAllRelationships('followers', '1', 60, () => {});
+    assert.equal(resumed.length, 2, 'the kept users plus the newly fetched page');
+    assert.equal(h.STATE.scanResumedFrom, 3, 'the UI needs to know it resumed');
+});
+
+test('Churn history records who was lost, and merges with retained cycles', async () => {
+    const h = harness();
+    h.IgBridge.resolveCurrentUser = async () => ({ id: '1', username: 'me' });
+    h.IgBridge.fetchAllRelationships = async endpoint => {
+        const list = []; list.completed = true;
+        list.push(endpoint === 'followers' ? { id: '2', username: 'still' } : { id: '3', username: 'x' });
+        return list;
+    };
+    h.MaxPlandVault.getLatestSnapshot = async () => ({ complete: true, account_id: '1', follower_ids: ['2', '42'], follower_usernames: { 42: 'gone_guy' } });
+    h.MaxPlandVault.getWhitelist = async () => new Map();
+    h.MaxPlandVault.saveSnapshot = async () => {};
+    h.MaxPlandVault.getChurnHistory = async () => [{ timestamp: Date.now() - 86400000, complete: true, account_id: '1', lost: [{ id: '77', username: 'older_gone' }] }];
+    const writes = [];
+    h.MaxPlandVault.saveChurn = async (record, account) => { writes.push({ record, account }); };
+    await h.runRelationshipScan();
+    assert.equal(writes.length, 1, 'one churn row per completed scan');
+    // Array.from rebuilds in the host realm: deepStrictEqual compares prototypes, and vm arrays
+    // never match host arrays even when the values do.
+    const lost = Array.from(writes[0].record.lost, u => ({ id: u.id, username: u.username }));
+    assert.deepEqual(lost, [{ id: '42', username: 'gone_guy' }], 'lost keeps the last known username');
+    assert.deepEqual(Array.from(writes[0].record.rejoined), [], 'nobody rejoined in this cycle');
+    assert.equal(writes[0].account, '1');
+    assert.deepEqual(Array.from(h.STATE.churnLost30, u => u.username), ['gone_guy', 'older_gone'], 'the 30-day view merges the new cycle with retained ones');
+    assert.equal(String(h.document.getElementById('pill-count-churn').textContent), '2');
+});
+
+test('A rejoining follower is reported as rejoined, not as a stranger', async () => {
+    const h = harness();
+    h.IgBridge.resolveCurrentUser = async () => ({ id: '1', username: 'me' });
+    h.IgBridge.fetchAllRelationships = async endpoint => {
+        const list = []; list.completed = true;
+        if (endpoint === 'followers') list.push({ id: '2', username: 'back_again' });
+        return list;
+    };
+    h.MaxPlandVault.getLatestSnapshot = async () => ({ complete: true, account_id: '1', follower_ids: [], follower_usernames: {} });
+    h.MaxPlandVault.getWhitelist = async () => new Map();
+    h.MaxPlandVault.saveSnapshot = async () => {};
+    h.MaxPlandVault.getChurnHistory = async () => [{ timestamp: Date.now() - 86400000, lost: [{ id: '2', username: 'back_again' }] }];
+    let record = null;
+    h.MaxPlandVault.saveChurn = async r => { record = r; };
+    await h.runRelationshipScan();
+    const rejoined = Array.from(record.rejoined, u => ({ id: u.id, username: u.username }));
+    assert.deepEqual(rejoined, [{ id: '2', username: 'back_again' }], 'a returning follower is flagged');
+    assert.deepEqual(Array.from(record.lost), [], 'and is not double-counted as lost');
+});
+
+test('A failing churn store cannot fail a completed scan', async () => {
+    const h = harness();
+    h.IgBridge.resolveCurrentUser = async () => ({ id: '1', username: 'me' });
+    h.IgBridge.fetchAllRelationships = async () => { const l = []; l.completed = true; return l; };
+    h.MaxPlandVault.getLatestSnapshot = async () => null;
+    h.MaxPlandVault.getWhitelist = async () => new Map();
+    h.MaxPlandVault.saveSnapshot = async () => {};
+    h.MaxPlandVault.getChurnHistory = async () => { throw new Error('churn store offline'); };
+    h.MaxPlandVault.saveChurn = async () => { throw new Error('churn store offline'); };
+    await h.runRelationshipScan();
+    assert.equal(h.STATE.scanIncomplete, false, 'history is a bonus; the scan result still stands');
+    assert.match(String(h.document.getElementById('maxpland-scan-phase').textContent), /completed/i);
+});
+
+test('Scan resume checkpoints every 5th page instead of every page', async () => {
+    const h = harness();
+    const writes = [];
+    const realSet = h.context.localStorage.setItem;
+    h.context.localStorage.setItem = (k, v) => { if (String(k).startsWith('mp_scan_resume_')) writes.push(k); return realSet(k, v); };
+    const PAGES = 12;
+    let page = 0;
+    h.IgBridge.fetchRelationshipPage = async () => {
+        page++;
+        return { users: [{ id: String(page), username: 'u' }], has_more: page < PAGES, next_max_id: page < PAGES ? 'c' + page : null };
+    };
+    const all = await h.IgBridge.fetchAllRelationships('followers', '1', 250, () => {});
+    assert.equal(all.completed, true);
+    assert.ok(writes.length >= 1, 'a long scan must still checkpoint for resume');
+    assert.ok(writes.length <= 3, 'a 12-page scan must not rewrite the whole checkpoint per page (wrote ' + writes.length + ')');
+});
+
+test('One failing injector cannot take the toolbar or observer down', async () => {
+    const h = harness();
+    const order = [];
+    assert.equal(h.safeStep('boom', () => { order.push('a'); throw new Error('boom'); }), null, 'safeStep must swallow the failure');
+    h.safeStep('ok', () => order.push('b'));
+    assert.deepEqual(order, ['a', 'b'], 'later steps still run after a failure');
+    const initBody = source.slice(source.indexOf('async function init()'));
+    assert.ok(initBody.indexOf('startPageObserver()') < initBody.indexOf("safeStep('feed tools'"),
+        'the observer must start before the injectors it has to outlive');
+    for (const label of ['stealth interceptor', 'clean feed', 'feed tools', 'story bar', 'profile badge']) {
+        assert.ok(initBody.includes("safeStep('" + label + "'"), `init must contain ${label} as a contained step`);
+    }
+});
+
+test('Search keystrokes still filter, and the render is coalesced', async () => {
+    const h = harness();
+    h.bindUIEvents(h.document.getElementById('trigger'), h.document.getElementById('overlay'), h.document.getElementById('modal'));
+    const pool = [{ id: '2', username: 'alpha' }, { id: '3', username: 'beta' }];
+    h.STATE.followers = pool;
+    h.STATE.notFollowingBack = pool;
+    const input = h.nodes.get('maxpland-user-search');
+    const handlers = ((input || {}).__click || {}).input || [];
+    assert.ok(handlers.length, 'the search box is wired');
+    for (const fn of handlers) fn({ target: { value: 'beta' } });
+    const html = String(h.document.getElementById('maxpland-relationship-list').innerHTML);
+    assert.match(html, /beta/, 'the filtered row is rendered');
+    assert.doesNotMatch(html, /alpha/, 'non-matching rows are dropped');
+    assert.match(source, /STATE\.searchRenderTimer = setTimeout/, 'keystrokes must be coalesced into one render');
 });
 
 (async () => {

@@ -1,13 +1,15 @@
 {
   "name": "ig-maxpland",
-  "version": "3.0.1",
+  "version": "3.2.0",
   "description": "Instagram Relationship Scanner & Comprehensive Media Downloader",
   "main": "dist/ig_maxpland_en.user.js",
   "scripts": {
     "build": "node build.js",
     "dev": "node build.js --watch",
     "test": "node round1.check.cjs dist/ig_maxpland_en.user.js",
-    "test:bundle": "node round1.check.cjs dist/ig_maxpland_en.user.js"
+    "test:bundle": "node round1.check.cjs dist/ig_maxpland_en.user.js",
+    "verify": "node build.js && node round1.check.cjs dist/ig_maxpland_en.user.js",
+    "check:drift": "git diff --exit-code -- dist/ig_maxpland_en.user.js ig_maxpland_en.user.js"
   },
   "keywords": [
     "instagram",
