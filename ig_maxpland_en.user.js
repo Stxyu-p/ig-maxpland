@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         IG MaxPland
 // @namespace    http://tampermonkey.net/
-// @version      3.2.0
+// @version      3.3.0
 // @description  Instagram Relationship Scanner & Comprehensive Media Downloader
 // @author       P Choke & SORA
 // @match        https://*.instagram.com/*
@@ -675,6 +675,15 @@
             const db = await this.init();
             IgBridge.assertAccount(accountId);
             if (signal?.aborted) throw new DOMException('Scan aborted by user', 'AbortError');
+            const compactUser = u => ({
+                id: String(u.pk || u.pk_id || u.id),
+                username: u.username || '',
+                full_name: u.full_name || '',
+                profile_pic_url: u.profile_pic_url || '',
+                is_verified: Boolean(u.is_verified),
+                is_private: Boolean(u.is_private),
+                has_anonymous_profile_picture: Boolean(u.has_anonymous_profile_picture)
+            });
             return new Promise((resolve, reject) => {
                 const tx = db.transaction('snapshots', 'readwrite');
                 const abort = () => { try { tx.abort(); } catch (_) {} };
@@ -689,9 +698,11 @@
                     following_count: following.length,
                     follower_ids: followers.map(u => String(u.pk || u.pk_id || u.id)),
                     following_ids: following.map(u => String(u.pk || u.pk_id || u.id)),
-                    // Separate id->username maps: lost-follower rows show real names with no extra API call.
                     follower_usernames: Object.fromEntries(followers.map(u => [String(u.pk || u.pk_id || u.id), String(u.username || '')]).filter(pair => pair[1])),
-                    following_usernames: Object.fromEntries(following.map(u => [String(u.pk || u.pk_id || u.id), String(u.username || '')]).filter(pair => pair[1]))
+                    following_usernames: Object.fromEntries(following.map(u => [String(u.pk || u.pk_id || u.id), String(u.username || '')]).filter(pair => pair[1])),
+                    // Cold-start hydration payload kept ONLY on the newest snapshot per account.
+                    followers_compact: followers.map(compactUser),
+                    following_compact: following.map(compactUser)
                 };
                 store.put(snap);
                 // Retention: keep the store bounded. The newest RETENTION complete snapshots per account survive;
@@ -703,10 +714,19 @@
                     scan.onsuccess = e => {
                         const cursor = e.target.result;
                         if (!cursor) return;
-                        const sameAccount = !accountId || String(cursor.value?.account_id) === String(accountId);
+                        const val = cursor.value;
+                        const sameAccount = !accountId || String(val?.account_id) === String(accountId);
                         if (sameAccount) {
                             seenAccount++;
-                            if (seenAccount > keep) { try { cursor.delete(); } catch (_) {} }
+                            if (seenAccount > keep) {
+                                try { cursor.delete(); } catch (_) {}
+                            } else if (seenAccount > 1 && (val.followers_compact || val.following_compact) && typeof cursor.update === 'function') {
+                                // Strip compact arrays from older snapshots so IndexedDB stays tiny across 30 cycles.
+                                const stripped = { ...val };
+                                delete stripped.followers_compact;
+                                delete stripped.following_compact;
+                                try { cursor.update(stripped); } catch (_) {}
+                            }
                         }
                         cursor.continue();
                     };
@@ -1424,12 +1444,16 @@ static async fetchStoryViewers(mediaId) {
     function loadPrefs() {
         try {
             const raw = localStorage.getItem('maxpland_prefs');
-            if (raw) return { ...DEFAULT_PREFS, ...JSON.parse(raw) };
+            if (raw && raw !== 'undefined') {
+                const parsed = JSON.parse(raw);
+                if (parsed && typeof parsed === 'object') return { ...DEFAULT_PREFS, ...parsed };
+            }
         } catch (_) {}
         return { ...DEFAULT_PREFS };
     }
 
-    function savePrefs(prefs) {
+    function savePrefs(prefs = STATE.prefs) {
+        if (!prefs || typeof prefs !== 'object') return;
         try {
             localStorage.setItem('maxpland_prefs', JSON.stringify(prefs));
         } catch (_) {}
@@ -1453,11 +1477,16 @@ static async fetchStoryViewers(mediaId) {
         const day = String(date.getDate()).padStart(2, '0');
         return `${date.getFullYear()}-${month}-${day}`;
     }
+    function getBudgetStorageKey() {
+        const uid = STATE?.relationshipAccountId || STATE?.currentUser?.id || IgBridge.getCookie('ds_user_id');
+        return uid ? `${WRITE_BUDGET_KEY}_${uid}` : WRITE_BUDGET_KEY;
+    }
     function getWriteBudget() {
         const day = localDayKey();
         const legacyUtcDay = new Date().toISOString().slice(0, 10);
+        const key = getBudgetStorageKey();
         let saved = null;
-        try { saved = JSON.parse(localStorage.getItem(WRITE_BUDGET_KEY)); } catch (_) {}
+        try { saved = JSON.parse(localStorage.getItem(key) || localStorage.getItem(WRITE_BUDGET_KEY) || 'null'); } catch (_) {}
         const sameLocalDay = Boolean(saved) && saved.day === day;
         // Pre-3.2 counters carried no tz marker and were keyed by the UTC date. Keep such a counter
         // while its UTC day is still today (the upgrade day may run a few hours strict, never loose),
@@ -1475,10 +1504,19 @@ static async fetchStoryViewers(mediaId) {
     function noteWrite() {
         const b = getWriteBudget();
         b.daily++;
-        try { localStorage.setItem(WRITE_BUDGET_KEY, JSON.stringify(b)); } catch (_) {}
+        const key = getBudgetStorageKey();
+        try {
+            localStorage.setItem(key, JSON.stringify(b));
+            if (key !== WRITE_BUDGET_KEY) {
+                localStorage.setItem(WRITE_BUDGET_KEY, JSON.stringify(b));
+            }
+        } catch (_) {}
     }
     function resetWriteBudget() {
-        try { localStorage.removeItem(WRITE_BUDGET_KEY); } catch (_) {}
+        try {
+            localStorage.removeItem(getBudgetStorageKey());
+            localStorage.removeItem(WRITE_BUDGET_KEY);
+        } catch (_) {}
     }
     function formatBudget() {
         const { used, cap, blocked } = budgetState();
@@ -1495,6 +1533,7 @@ static async fetchStoryViewers(mediaId) {
         mutual: [],
         lostFollowers: [],
         ghostFollowers: [],
+        renamed: [],
         inactiveFollowing: [],
         isScanningInactive: false,
         stopInactiveScanFlag: false,
@@ -1805,9 +1844,9 @@ let cleanFeedObserver = null;
                     scanArticles();
                 }, 150);
             });
-                    // ponytail: scope to <main> with a body fallback — IG mutates sidebar/dialog/header constantly.
-            const feedRoot = document.querySelector('main') || document.body || document.documentElement;
-            cleanFeedObserver.observe(feedRoot, { childList: true, subtree: true });
+            // Observe document.body so SPA route transitions that unmount <main> never detach the observer.
+            const feedRoot = document.body || document.documentElement;
+            if (feedRoot) cleanFeedObserver.observe(feedRoot, { childList: true, subtree: true });
         }
     }
 
@@ -2022,6 +2061,9 @@ const overlay = document.createElement('div');
                             <button type="button" class="maxpland-btn-secondary" id="maxpland-btn-deselect-all" style="padding:3px 8px;font-size:11px;">Deselect all</button>
                         </div>
                         <div class="maxpland-bulk-actions">
+                            <button type="button" class="maxpland-btn-secondary" id="maxpland-btn-batch-whitelist" style="padding:5px 11px;font-size:11.5px;">
+                                ${ICONS.STAR_FILLED} Whitelist Selected
+                            </button>
                             <button type="button" class="maxpland-btn-danger" id="maxpland-btn-batch-unfollow">
                                 ${ICONS.UNFOLLOW} Unfollow Selected
                             </button>
@@ -2284,7 +2326,7 @@ const overlay = document.createElement('div');
             </div>
 
             <div class="maxpland-footer">
-                <span>MaxPland v3.2.0 · Clean Minimal Precision (Anti-Slop)</span>
+                <span>MaxPland v3.3.0 · Clean Minimal Precision (Anti-Slop)</span>
                 <span>Toggle <kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>M</kbd></span>
             </div>
         `;
@@ -2355,8 +2397,14 @@ const user = await IgBridge.resolveCurrentUser();
                 badge.textContent = 'Account not found (Log in)';
             }
 
+            if (user?.id && !STATE.isScanning && (STATE.followers.length === 0 || String(STATE.relationshipAccountId) !== String(user.id))) {
+                await hydrateFromLatestSnapshot(user.id);
+            }
+
             syncFeaturesTab();
             syncSettingsTab();
+            const bl = document.getElementById('maxpland-budget-label');
+            if (bl) bl.textContent = formatBudget();
             if (STATE.activeTab === 'health') renderHealthDashboard();
         };
 
@@ -2462,6 +2510,7 @@ let isPointerDown = false;
                 filterBtns.forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
                 STATE.relationshipFilter = btn.dataset.filter;
+                STATE.relationshipLimit = 100;
                 STATE.selectedIds.clear();
                 updateBulkActionBar();
                 renderRelationshipList();
@@ -2480,6 +2529,7 @@ let isPointerDown = false;
         const toggleWhitelist = document.getElementById('toggle-filter-whitelist');
         toggleWhitelist.addEventListener('click', () => {
             STATE.subFilters.excludeWhitelist = !STATE.subFilters.excludeWhitelist;
+            STATE.relationshipLimit = 100;
             toggleWhitelist.classList.toggle('active', STATE.subFilters.excludeWhitelist);
             renderRelationshipList();
         });
@@ -2487,6 +2537,7 @@ let isPointerDown = false;
         const toggleVerified = document.getElementById('toggle-filter-verified');
         toggleVerified.addEventListener('click', () => {
             STATE.subFilters.excludeVerified = !STATE.subFilters.excludeVerified;
+            STATE.relationshipLimit = 100;
             toggleVerified.classList.toggle('active', STATE.subFilters.excludeVerified);
             renderRelationshipList();
         });
@@ -2494,6 +2545,7 @@ let isPointerDown = false;
         const togglePrivate = document.getElementById('toggle-filter-private');
         togglePrivate.addEventListener('click', () => {
             STATE.subFilters.excludePrivate = !STATE.subFilters.excludePrivate;
+            STATE.relationshipLimit = 100;
             togglePrivate.classList.toggle('active', STATE.subFilters.excludePrivate);
             renderRelationshipList();
         });
@@ -2501,6 +2553,7 @@ let isPointerDown = false;
         const toggleNoAvatar = document.getElementById('toggle-filter-noavatar');
         toggleNoAvatar.addEventListener('click', () => {
             STATE.subFilters.excludeNoAvatar = !STATE.subFilters.excludeNoAvatar;
+            STATE.relationshipLimit = 100;
             toggleNoAvatar.classList.toggle('active', STATE.subFilters.excludeNoAvatar);
             renderRelationshipList();
         });
@@ -2511,6 +2564,7 @@ let isPointerDown = false;
 
         document.getElementById('maxpland-user-search').addEventListener('input', (e) => {
             STATE.searchQuery = e.target.value.trim().toLowerCase();
+            STATE.relationshipLimit = 100;
             // ponytail: coalesce keystrokes — each render filters the whole pool and rebuilds up to the row limit.
             clearTimeout(STATE.searchRenderTimer);
             STATE.searchRenderTimer = setTimeout(() => { STATE.searchRenderTimer = null; renderRelationshipList(); }, 120);
@@ -2550,6 +2604,24 @@ let isPointerDown = false;
             STATE.selectedIds.clear();
             updateBulkActionBar();
             renderRelationshipList();
+        });
+        document.getElementById('maxpland-btn-batch-whitelist').addEventListener('click', async () => {
+            if (!STATE.selectedIds.size) return;
+            const pool = getFilteredUsers();
+            const toAdd = pool.filter(u => STATE.selectedIds.has(String(u.id || u.pk_id || u.pk || '')));
+            if (!toAdd.length) return;
+            try {
+                const count = await MaxPlandVault.importWhitelist(toAdd);
+                STATE.whitelist = await MaxPlandVault.getWhitelist();
+                const whiteEl = document.getElementById('pill-count-white');
+                if (whiteEl) whiteEl.textContent = STATE.whitelist.size.toLocaleString();
+                STATE.selectedIds.clear();
+                updateBulkActionBar();
+                renderRelationshipList();
+                showToast(`Added ${count.toLocaleString()} account(s) to Whitelist`);
+            } catch (err) {
+                alert(`Failed to update Whitelist: ${err.message || err}`);
+            }
         });
         document.getElementById('maxpland-btn-batch-unfollow').addEventListener('click', runBatchUnfollow);
 
@@ -2862,8 +2934,130 @@ const btnScanInactive = document.getElementById('maxpland-btn-scan-inactive');
     }
 
     /* ==========================================================================
-       7. RELATIONSHIP SCANNER LOGIC
+       7. RELATIONSHIP SCANNER LOGIC & COLD-START HYDRATION
        ========================================================================== */
+
+    function computeRelationshipBuckets(followers, following) {
+        const getUid = u => String(u?.id || u?.pk_id || u?.pk || '').trim();
+        const getUname = u => String(u?.username || '').trim().toLowerCase();
+
+        const followerIdSet = new Set();
+        const followerUsernameSet = new Set();
+        for (const u of followers) {
+            const uid = getUid(u);
+            const uname = getUname(u);
+            if (uid) followerIdSet.add(uid);
+            if (uname) followerUsernameSet.add(uname);
+        }
+
+        const followingIdSet = new Set();
+        const followingUsernameSet = new Set();
+        for (const u of following) {
+            const uid = getUid(u);
+            const uname = getUname(u);
+            if (uid) followingIdSet.add(uid);
+            if (uname) followingUsernameSet.add(uname);
+        }
+
+        const isFollower = u => {
+            if (u?.friendship_status?.followed_by === true) return true;
+            const uid = getUid(u);
+            const uname = getUname(u);
+            return (Boolean(uid) && followerIdSet.has(uid)) || (Boolean(uname) && followerUsernameSet.has(uname));
+        };
+
+        const isFollowing = u => {
+            if (u?.friendship_status?.following === true) return true;
+            const uid = getUid(u);
+            const uname = getUname(u);
+            return (Boolean(uid) && followingIdSet.has(uid)) || (Boolean(uname) && followingUsernameSet.has(uname));
+        };
+
+        return {
+            followerIdSet,
+            followingIdSet,
+            followingUsernameSet,
+            notFollowingBack: following.filter(u => !isFollower(u)),
+            fans: followers.filter(u => !isFollowing(u)),
+            mutual: following.filter(u => isFollower(u)),
+            ghostFollowers: followers.filter(u => hasNoAvatar(u))
+        };
+    }
+
+    function syncRelationshipStatCounters() {
+        const el = id => document.getElementById(id);
+        for (const [stat, pill, key] of [
+            ['not-following-back', 'not', 'notFollowingBack'],
+            ['fans', 'fans', 'fans'],
+            ['mutual', 'mutual', 'mutual'],
+            ['lost', 'lost', 'lostFollowers'],
+            ['ghost', 'ghost', 'ghostFollowers'],
+            ['renamed', 'renamed', 'renamed']
+        ]) {
+            if (el(`stat-${stat}`)) el(`stat-${stat}`).textContent = (STATE[key] || []).length.toLocaleString();
+            if (el(`pill-count-${pill}`)) el(`pill-count-${pill}`).textContent = (STATE[key] || []).length.toLocaleString();
+        }
+        if (el('pill-count-churn')) el('pill-count-churn').textContent = (STATE.churnLost30 || []).length.toLocaleString();
+        if (el('pill-count-white')) el('pill-count-white').textContent = STATE.whitelist.size.toLocaleString();
+    }
+
+    async function hydrateFromLatestSnapshot(accountId) {
+        if (!accountId || STATE.isScanning) return false;
+        try {
+            const [snap, whitelist, churnCycles] = await Promise.all([
+                MaxPlandVault.getLatestSnapshot(accountId),
+                MaxPlandVault.getWhitelist(),
+                MaxPlandVault.getChurnHistory(accountId, APP_CONFIG.SNAPSHOT_RETENTION)
+            ]);
+            STATE.whitelist = whitelist;
+            STATE.churnLost30 = flattenChurnLost(churnCycles);
+            STATE.churnCycles = churnCycles.length;
+
+            if (!snap || !Array.isArray(snap.followers_compact) || !Array.isArray(snap.following_compact)) {
+                const whiteEl = document.getElementById('pill-count-white');
+                if (whiteEl) whiteEl.textContent = whitelist.size.toLocaleString();
+                const churnEl = document.getElementById('pill-count-churn');
+                if (churnEl && STATE.churnLost30.length) churnEl.textContent = STATE.churnLost30.length.toLocaleString();
+                return false;
+            }
+
+            const followers = snap.followers_compact;
+            const following = snap.following_compact;
+            const buckets = computeRelationshipBuckets(followers, following);
+            const latestChurn = churnCycles[0];
+            const lostFollowers = (latestChurn?.lost || []).map(entry => ({
+                pk: String(entry.id),
+                id: String(entry.id),
+                username: entry.username || `user_${entry.id}`,
+                profile_pic_url: '',
+                full_name: 'Unfollowed in last recorded scan'
+            }));
+
+            Object.assign(STATE, {
+                relationshipAccountId: String(accountId),
+                followers,
+                following,
+                notFollowingBack: buckets.notFollowingBack,
+                fans: buckets.fans,
+                mutual: buckets.mutual,
+                ghostFollowers: buckets.ghostFollowers,
+                lostFollowers,
+                renamed: [],
+                scanIncomplete: false
+            });
+
+            syncRelationshipStatCounters();
+            const summary = document.getElementById('maxpland-scan-status-summary');
+            if (summary) {
+                summary.textContent = `Cached scan (${new Date(snap.timestamp).toLocaleString()}) · Followers ${followers.length.toLocaleString()} · Following ${following.length.toLocaleString()}`;
+            }
+            renderRelationshipList();
+            return true;
+        } catch (err) {
+            console.warn('[MaxPland] Snapshot hydration skipped', err);
+            return false;
+        }
+    }
 
     async function runRelationshipScan() {
         if (STATE.isScanning || STATE.isUnfollowing || STATE.isScanningInactive) return;
@@ -2939,39 +3133,8 @@ const btnScanInactive = document.getElementById('maxpland-btn-scan-inactive');
             }
             const { followers, following } = lists;
             const getUid = u => String(u?.id || u?.pk_id || u?.pk || '').trim();
-            const getUname = u => String(u?.username || '').trim().toLowerCase();
-
-            const followerIdSet = new Set();
-            const followerUsernameSet = new Set();
-            for (const u of followers) {
-                const uid = getUid(u);
-                const uname = getUname(u);
-                if (uid) followerIdSet.add(uid);
-                if (uname) followerUsernameSet.add(uname);
-            }
-
-            const followingIdSet = new Set();
-            const followingUsernameSet = new Set();
-            for (const u of following) {
-                const uid = getUid(u);
-                const uname = getUname(u);
-                if (uid) followingIdSet.add(uid);
-                if (uname) followingUsernameSet.add(uname);
-            }
-
-            const isFollower = u => {
-                if (u?.friendship_status?.followed_by === true) return true;
-                const uid = getUid(u);
-                const uname = getUname(u);
-                return (Boolean(uid) && followerIdSet.has(uid)) || (Boolean(uname) && followerUsernameSet.has(uname));
-            };
-
-            const isFollowing = u => {
-                if (u?.friendship_status?.following === true) return true;
-                const uid = getUid(u);
-                const uname = getUname(u);
-                return (Boolean(uid) && followingIdSet.has(uid)) || (Boolean(uname) && followingUsernameSet.has(uname));
-            };
+            const buckets = computeRelationshipBuckets(followers, following);
+            const { followerIdSet, followingIdSet, followingUsernameSet } = buckets;
 
             const prev = await MaxPlandVault.getLatestSnapshot(currentUser.id);
             const whitelist = await MaxPlandVault.getWhitelist();
@@ -3037,17 +3200,14 @@ const btnScanInactive = document.getElementById('maxpland-btn-scan-inactive');
             } catch (err) {
                 console.warn('[MaxPland] Churn history unavailable', err);
             }
-            Object.assign(STATE, { followers, following, whitelist, lostFollowers, renamed, scanIncomplete: false,
-                notFollowingBack: following.filter(u => !isFollower(u)),
-                fans: followers.filter(u => !isFollowing(u)),
-                mutual: following.filter(u => isFollower(u)),
-                ghostFollowers: followers.filter(u => hasNoAvatar(u)) });
-            for (const [stat, pill, key] of [['not-following-back','not','notFollowingBack'],['fans','fans','fans'],['mutual','mutual','mutual'],['lost','lost','lostFollowers'],['ghost','ghost','ghostFollowers'],['renamed','renamed','renamed']]) {
-                if (el(`stat-${stat}`)) el(`stat-${stat}`).textContent = STATE[key].length.toLocaleString();
-                if (el(`pill-count-${pill}`)) el(`pill-count-${pill}`).textContent = STATE[key].length.toLocaleString();
-            }
-            if (el('pill-count-churn')) el('pill-count-churn').textContent = (STATE.churnLost30 || []).length.toLocaleString();
-            el('pill-count-white').textContent = whitelist.size.toLocaleString();
+            Object.assign(STATE, {
+                followers, following, whitelist, lostFollowers, renamed, scanIncomplete: false,
+                notFollowingBack: buckets.notFollowingBack,
+                fans: buckets.fans,
+                mutual: buckets.mutual,
+                ghostFollowers: buckets.ghostFollowers
+            });
+            syncRelationshipStatCounters();
             el('maxpland-progress-fill').style.width = '100%';
             phase.textContent = 'Scan completed';
             notice.style.display = 'none';
@@ -3167,6 +3327,7 @@ const btnScanInactive = document.getElementById('maxpland-btn-scan-inactive');
         const next = !STATE.subFilters[which];
         STATE.subFilters.onlyFollowing = which === 'onlyFollowing' && next;
         STATE.subFilters.onlyNotFollowed = which === 'onlyNotFollowed' && next;
+        STATE.relationshipLimit = 100;
         document.getElementById('toggle-filter-following').classList.toggle('active', STATE.subFilters.onlyFollowing);
         document.getElementById('toggle-filter-notfollowing').classList.toggle('active', STATE.subFilters.onlyNotFollowed);
         renderRelationshipList();
@@ -3182,6 +3343,7 @@ const btnScanInactive = document.getElementById('maxpland-btn-scan-inactive');
         else if (STATE.relationshipFilter === 'mutual') { tagClass = 'mutual'; tagText = 'Mutual'; }
         else if (STATE.relationshipFilter === 'lost') { tagClass = 'lost'; tagText = 'Lost'; }
         else if (STATE.relationshipFilter === 'ghost') { tagClass = 'ghost'; tagText = '👻 Ghost'; }
+        else if (STATE.relationshipFilter === 'renamed') { tagClass = 'fan'; tagText = '✏️ Renamed'; }
         else if (STATE.relationshipFilter === 'inactive') { tagClass = 'ghost'; tagText = '⏱️ Inactive'; }
         else if (STATE.relationshipFilter === 'churn') { tagClass = 'lost'; tagText = '🔻 Lost 30d'; }
         else if (STATE.relationshipFilter === 'whitelist') { tagClass = 'mutual'; tagText = '⭐ Whitelist'; }
@@ -3272,6 +3434,11 @@ const btnScanInactive = document.getElementById('maxpland-btn-scan-inactive');
         STATE.following = STATE.following.filter(u => !isTarget(u));
         STATE.notFollowingBack = STATE.notFollowingBack.filter(u => !isTarget(u));
         STATE.mutual = STATE.mutual.filter(u => !isTarget(u));
+        STATE.inactiveFollowing = STATE.inactiveFollowing.filter(u => !isTarget(u));
+        const inactPill = document.getElementById('pill-count-inactive');
+        if (inactPill && STATE.inactiveFollowing.length >= 0) {
+            inactPill.textContent = STATE.inactiveFollowing.length.toLocaleString();
+        }
         const fan = STATE.followers.find(isTarget);
         if (fan && !STATE.fans.some(isTarget)) STATE.fans.push(fan);
         for (const key of ['fans', 'mutual']) {
@@ -3418,7 +3585,11 @@ const btnScanInactive = document.getElementById('maxpland-btn-scan-inactive');
         }
         const text = pool.map(u => u.username || '').filter(Boolean).join('\n');
         try {
-            await navigator.clipboard.writeText(text);
+            if (typeof GM_setClipboard === 'function') {
+                GM_setClipboard(text, 'text');
+            } else {
+                await navigator.clipboard.writeText(text);
+            }
             showToast(`Copied ${pool.length.toLocaleString()} usernames to clipboard`);
         } catch (_) {
             alert('Failed to copy to clipboard. Please retry.');
@@ -3431,14 +3602,22 @@ const btnScanInactive = document.getElementById('maxpland-btn-scan-inactive');
             alert('No data in this category to export.');
             return;
         }
-        const rows = [['User ID', 'Username', 'Full Name', 'Is Verified', 'Is Private']];
-        pool.forEach(u => rows.push([
-            u.pk || u.pk_id || u.id || '',
-            u.username || '',
-            u.full_name || '',
-            u.is_verified ? 'Yes' : 'No',
-            u.is_private ? 'Yes' : 'No'
-        ]));
+        const rows = [['User ID', 'Username', 'Full Name', 'Is Verified', 'Is Private', 'Category', 'Whitelisted', 'Profile URL']];
+        pool.forEach(u => {
+            const uid = String(u.pk || u.pk_id || u.id || '');
+            const uname = String(u.username || '');
+            const isWhitelisted = isProtectedUser(uid, uname);
+            rows.push([
+                uid,
+                uname,
+                u.full_name || '',
+                u.is_verified ? 'Yes' : 'No',
+                u.is_private ? 'Yes' : 'No',
+                STATE.relationshipFilter,
+                isWhitelisted ? 'Yes' : 'No',
+                uname ? `https://www.instagram.com/${uname}/` : ''
+            ]);
+        });
         const csv = '\uFEFF' + rows.map(r => r.map(csvCell).join(',')).join('\r\n');
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
         downloadBlob(blob, `IG_MaxPland_${STATE.relationshipFilter}_${new Date().toISOString().slice(0,10)}.csv`);
@@ -3490,11 +3669,30 @@ const btnScanInactive = document.getElementById('maxpland-btn-scan-inactive');
        11. MEDIA DOWNLOADER ENGINE
        ========================================================================== */
 
-    async function downloadResolvedMedia(resolved, { allCarousel = false, skipExisting = false } = {}) {
+    function detectActiveCarouselIndex(article) {
+        if (!article) return 0;
+        const items = [...article.querySelectorAll('ul li')].filter(li => {
+            const r = li.getBoundingClientRect();
+            return r.width > 40 && r.height > 40;
+        });
+        if (!items.length) return 0;
+        const artRect = article.getBoundingClientRect();
+        const centerX = (artRect.left + artRect.right) / 2;
+        let bestIdx = 0, minDist = Infinity;
+        items.forEach((li, idx) => {
+            const r = li.getBoundingClientRect();
+            const dist = Math.abs(((r.left + r.right) / 2) - centerX);
+            if (dist < minDist) { minDist = dist; bestIdx = idx; }
+        });
+        return bestIdx;
+    }
+
+    async function downloadResolvedMedia(resolved, { allCarousel = false, slideIndex = 0, skipExisting = false } = {}) {
         const accountId = IgBridge.getCookie('ds_user_id');
         IgBridge.assertAccount(accountId);
         const completed = [];
-        const nodesToDownload = allCarousel ? resolved.nodes : [resolved.nodes[0]];
+        const safeIdx = Math.min(Math.max(0, Number(slideIndex) || 0), Math.max(0, (resolved.nodes || []).length - 1));
+        const nodesToDownload = allCarousel ? resolved.nodes : [resolved.nodes[safeIdx]];
 
         for (const node of nodesToDownload) {
             IgBridge.assertAccount(accountId);
@@ -4021,9 +4219,10 @@ function injectInFeedDownloadButtons(root = document) {
         const accountId = IgBridge.getCookie('ds_user_id');
         IgBridge.assertAccount(accountId);
         const shortcode = shortcodeFromArticle(article);
+        const slideIndex = detectActiveCarouselIndex(article);
         if (shortcode) {
             try {
-                const results = await downloadByShortcode(shortcode, { allCarousel, skipExisting: false });
+                const results = await downloadByShortcode(shortcode, { allCarousel, slideIndex, skipExisting: false });
                 const done = results.filter(x => x.status === 'done').length;
                 if (!done) throw new Error('No downloadable media stream found');
                 if (typeof GM_notification === 'function') GM_notification({ title: APP_CONFIG.APP_NAME, text: `Downloaded ${done} file(s) from ${shortcode}`, timeout: 2500 });
@@ -4320,7 +4519,7 @@ function injectInFeedDownloadButtons(root = document) {
         stealthBtn.onclick = () => {
             const next = !(STATE.prefs?.stealthStory !== false);
             STATE.prefs.stealthStory = next;
-            savePrefs();
+            savePrefs(STATE.prefs);
             stealthBtn.style.background = next ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)';
             stealthBtn.style.border = `1px solid ${next ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)'}`;
             stealthBtn.innerHTML = `<span>${next ? '👁️ Stealth: ON' : '👁️ Stealth: OFF'}</span>`;
@@ -4328,6 +4527,42 @@ function injectInFeedDownloadButtons(root = document) {
             const modalSwitch = document.getElementById('pref-switch-stealth-story');
             if (modalSwitch) modalSwitch.checked = next;
             showToast(next ? 'Stealth Story Viewer enabled (Seen blocked)' : 'Stealth Story Viewer disabled');
+        };
+
+        const dlBtn = document.createElement('button');
+        dlBtn.type = 'button';
+        dlBtn.id = 'maxpland-story-dl-btn';
+        dlBtn.className = 'maxpland-story-btn';
+        dlBtn.innerHTML = `${ICONS.DOWNLOAD}<span>Download HD</span>`;
+        dlBtn.title = 'Download current story in full HD resolution';
+        dlBtn.onclick = async () => {
+            dlBtn.disabled = true;
+            try {
+                const media = await resolveCurrentStoryMedia(false);
+                if (!media?.url || media.isBlob) {
+                    showToast('Direct stream unavailable — try Open Raw');
+                    return;
+                }
+                const pathParts = location.pathname.split('/').filter(Boolean);
+                const uname = safeFilename(pathParts[1] || 'story');
+                const storyId = pathParts[2] || Date.now();
+                const ext = extensionFromUrl(media.url, media.isVideo ? 'mp4' : 'jpg');
+                const filename = `${uname}_story_${storyId}.${ext}`;
+                await gmDownload(media.url, filename);
+                await MaxPlandVault.markMediaDownloaded({
+                    key: `story:${storyId}:media`,
+                    shortcode: String(storyId),
+                    username: uname,
+                    item_index: 0,
+                    media_type: media.isVideo ? 'story_video' : 'story_image',
+                    files: [filename]
+                });
+                showToast(`Downloaded ${filename}`);
+            } catch (err) {
+                showToast(`Story download failed: ${err.message || err}`);
+            } finally {
+                dlBtn.disabled = false;
+            }
         };
 
         const openBtn = document.createElement('button');
@@ -4381,7 +4616,7 @@ function injectInFeedDownloadButtons(root = document) {
             }
         };
 
-        bar.append(stealthBtn, openBtn, viewersBtn);
+        bar.append(stealthBtn, dlBtn, openBtn, viewersBtn);
         document.body.appendChild(bar);
     }
 
@@ -4441,11 +4676,8 @@ function injectProfileAvatarBadge() {
                 }
             }, 300);
         });
-                    // ponytail: feed UI lives under <main>, the avatar badge under <header>; fall back to body.
-        const pageRoots = [document.querySelector('main'), document.querySelector('header')].filter(Boolean);
-        for (const root of (pageRoots.length ? pageRoots : [document.body])) {
-            observer.observe(root, { childList: true, subtree: true });
-        }
+        const rootNode = document.body || document.documentElement;
+        if (rootNode) observer.observe(rootNode, { childList: true, subtree: true });
     }
 
     /* ==========================================================================

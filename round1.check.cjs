@@ -225,7 +225,7 @@ test('Story media resolution falls back to video poster when API unavailable', a
     assert.equal(coverRes.isVideo, false);
 });
 
-test('Story toolbar renders 3 buttons (Stealth + Open Raw + Viewers) and omits download buttons', () => {
+test('Story toolbar renders 4 buttons (Stealth + Download HD + Open Raw + Viewers)', () => {
     const h = harness();
     h.context.location.pathname = '/stories/someone/';
     const container = {
@@ -241,11 +241,11 @@ test('Story toolbar renders 3 buttons (Stealth + Open Raw + Viewers) and omits d
     const bar = h.document.getElementById('maxpland-story-bar');
     assert.ok(bar, 'story bar must be injected');
     const buttons = bar.children.filter(c => c.tagName === 'BUTTON');
-    assert.equal(buttons.length, 3, 'must render exactly 3 buttons: Stealth toggle + Open Raw + Viewers');
+    assert.equal(buttons.length, 4, 'must render 4 buttons: Stealth toggle + Download HD + Open Raw + Viewers');
     assert.ok(buttons.some(b => b.id === 'maxpland-story-stealth-toggle'), 'stealth toggle present');
+    assert.ok(buttons.some(b => b.id === 'maxpland-story-dl-btn'), 'download story button present');
     assert.ok(buttons.some(b => b.id === 'maxpland-story-open-btn'), 'open raw tab button present');
     assert.ok(buttons.some(b => b.id === 'maxpland-story-viewers-btn'), 'story viewers button present');
-    assert.ok(!buttons.some(b => b.id === 'maxpland-story-dl-btn'), 'download story button stays removed (fragile per v2.7.2)');
     assert.ok(!buttons.some(b => b.id === 'maxpland-story-cover-btn'), 'cover button stays removed');
 });
 

@@ -4,6 +4,26 @@ All notable changes to IG MaxPland are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.0] - 2026-10-16
+
+### Added
+- **Cold-Start Snapshot Hydration**: Opening the modal now automatically restores the latest relationship dataset (`followers_compact`, `following_compact`) from IndexedDB without network requests, eliminating API round-trips on browser restarts.
+- **Story Toolbar Direct HD Downloader**: Added `Download HD` button to the floating Story toolbar, allowing 1-click full-resolution media downloads directly to disk with automatic Media Vault history tracking.
+- **Carousel Active Slide Detection**: Media downloads on carousel posts now detect the currently visible slide (`detectActiveCarouselIndex`) via viewport geometry, ensuring the exact viewing asset is downloaded rather than defaulting to slide 1.
+- **Bulk Whitelist Action**: Added `Whitelist Selected` to the floating selection bar, allowing one-click protection of multiple selected accounts.
+- **Enriched Relationship CSV Export**: CSV exports now include `Category`, `Whitelisted`, and direct `Profile URL` columns for downstream spreadsheet audits.
+
+### Fixed
+- **Settings Persistence Bug**: Fixed `savePrefs()` being called without arguments in the Story toolbar which corrupted `localStorage` with `"undefined"`.
+- **Multi-Account Quota Collision**: Keyed daily unfollow budgets by `accountId`, preventing quota collisions when switching accounts on the same browser.
+- **Renamed Category Labeling**: Added dedicated mapping for `renamed` filter, resolving incorrect "Not Following Back" status tags.
+- **Stale Inactive Following State**: Fixed unfollowed accounts persisting in `STATE.inactiveFollowing` and updated `#pill-count-inactive`.
+- **SPA Observer Resilience**: Attached feed and clean-feed mutation observers to `document.body` instead of ephemeral `<main>` DOM nodes that unmount across React SPA route changes.
+- **DOM Rendering Latency**: Reset `relationshipLimit` to 100 on filter, search, and category changes to prevent large list DOM re-renders.
+
+### Validation
+- 64/64 invariant checks passing in test suite against `dist/ig_maxpland_en.user.js`.
+
 ## [3.2.0] - 2026-10-07
 
 ### Added
