@@ -10,6 +10,7 @@
 [![Install Raw](https://img.shields.io/badge/Install-Userscript%20Raw-0284c7?style=for-the-badge&logo=tampermonkey&logoColor=white)](https://raw.githubusercontent.com/Stxyu-p/ig-maxpland/main/ig_maxpland_en.user.js)
 [![Greasy Fork](https://img.shields.io/badge/Greasy%20Fork-Install-red?style=for-the-badge&logo=greasyfork&logoColor=white)](https://greasyfork.org/en/scripts/595787-ig-maxpland)
 [![Release](https://img.shields.io/badge/Release-v3.3.0-10b981?style=for-the-badge)](https://github.com/Stxyu-p/ig-maxpland)
+[![Changelog](https://img.shields.io/badge/Changelog-View_Notes-blueviolet?style=for-the-badge)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/License-MIT-f59e0b?style=for-the-badge)](LICENSE)
 
 ![Dependencies](https://img.shields.io/badge/Dependencies-Zero-success?style=flat-square)
@@ -162,6 +163,7 @@ Meta deploys automated rate anomaly detection. IG MaxPland enforces strict behav
 ```text
 ig-maxpland/
 ├── ig_maxpland_en.user.js   # Production single-file userscript (Global English)
+├── CHANGELOG.md             # Version history and release notes
 ├── README.md                # Project documentation and specifications
 └── LICENSE                  # MIT License
 ```
