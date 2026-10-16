@@ -20,6 +20,7 @@
 
     const ICONS = {
         LOGO: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="20" x="2" y="2" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/></svg>`,
+        TRIGGER: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="20" x="2" y="2" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/></svg>`,
         CLOSE: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`,
         USERS: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
         DOWNLOAD: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
@@ -94,19 +95,22 @@
         /* Mini Floating Draggable Launcher */
         #maxpland-trigger-btn {
             position: fixed; right: 24px; bottom: 24px; z-index: 99998;
-            width: 44px; height: 44px; border-radius: 50%; padding: 0;
+            width: 44px; height: 44px; border-radius: 12px; padding: 0;
             display: grid; place-items: center;
             appearance: none; -webkit-appearance: none;
-            border: 1.5px solid #0284c7; background: #171b23; color: #38bdf8;
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5), 0 0 12px rgba(2, 132, 199, 0.35);
+            border: 1.5px solid rgba(255, 255, 255, 0.35);
+            background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
+            color: #ffffff;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), 0 0 14px rgba(220, 39, 67, 0.35);
             cursor: grab; user-select: none; touch-action: none;
             transition: border-color .15s ease, box-shadow .15s ease, transform .12s ease;
         }
         #maxpland-trigger-btn:hover {
-            border-color: #38bdf8; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.6), 0 0 16px rgba(56, 189, 248, 0.5);
-            transform: scale(1.05);
+            border-color: rgba(255, 255, 255, 0.7);
+            box-shadow: 0 6px 22px rgba(0, 0, 0, 0.5), 0 0 18px rgba(220, 39, 67, 0.55);
+            transform: scale(1.08);
         }
-        #maxpland-trigger-btn:active { cursor: grabbing; transform: scale(0.98); }
+        #maxpland-trigger-btn:active { cursor: grabbing; transform: scale(0.96); }
 
         /* Header */
         .maxpland-header {
@@ -463,10 +467,11 @@
 
         /* Profile Avatar HD Download Badge */
         .maxpland-avatar-badge {
-            display: inline-flex; align-items: center; gap: 5px; margin-left: 10px;
+            display: flex; align-items: center; justify-content: center; gap: 5px;
+            margin: 10px auto 0 auto; width: fit-content; text-align: center;
             background: var(--mp-bg-panel); border: 1px solid var(--mp-border-card); border-radius: 6px;
             padding: 4px 10px; font-size: 11.5px; font-weight: 600; color: #38bdf8; cursor: pointer;
-            transition: all .12s; vertical-align: middle;
+            transition: all .12s;
         }
         .maxpland-avatar-badge:hover { background: var(--mp-bg-hover); border-color: #38bdf8; }
 
@@ -1835,7 +1840,7 @@ const triggerBtn = document.createElement('button');
         triggerBtn.setAttribute('aria-label', 'Open IG MaxPland');
         triggerBtn.id = 'maxpland-trigger-btn';
         triggerBtn.title = 'MaxPland · Alt+Shift+M (Draggable)';
-        triggerBtn.innerHTML = ICONS.LOGO;
+        triggerBtn.innerHTML = ICONS.TRIGGER || ICONS.LOGO;
 
 try {
             const savedPos = JSON.parse(localStorage.getItem('maxpland_launcher_pos') || 'null');
@@ -2877,16 +2882,50 @@ const btnScanInactive = document.getElementById('maxpland-btn-scan-inactive');
 
     function gmDownload(url, name) {
         return new Promise((resolve, reject) => {
-            GM_download({
-                url,
-                name,
-                saveAs: false,
-                timeout: 120000,
-                ontimeout: () => reject(new Error('Download timed out')),
-                onabort: () => reject(new Error('Download aborted')),
-                onload: () => resolve(name),
-                onerror: err => reject(err)
-            });
+            const tryDirectAnchor = () => {
+                try {
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = name;
+                    a.target = '_blank';
+                    a.rel = 'noopener noreferrer';
+                    document.body.appendChild(a);
+                    a.click();
+                    setTimeout(() => a.remove(), 1000);
+                    resolve(name);
+                } catch (e) {
+                    reject(e);
+                }
+            };
+
+            const tryFetchBlob = () => {
+                fetch(url, { credentials: 'omit' })
+                    .then(res => {
+                        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                        return res.blob();
+                    })
+                    .then(blob => resolve(downloadBlob(blob, name)))
+                    .catch(() => tryDirectAnchor());
+            };
+
+            if (typeof GM_download === 'function') {
+                try {
+                    GM_download({
+                        url,
+                        name,
+                        saveAs: false,
+                        timeout: 120000,
+                        ontimeout: () => tryFetchBlob(),
+                        onabort: () => reject(new Error('Download aborted')),
+                        onload: () => resolve(name),
+                        onerror: () => tryFetchBlob()
+                    });
+                } catch (_) {
+                    tryFetchBlob();
+                }
+            } else {
+                tryFetchBlob();
+            }
         });
     }
 
@@ -4352,14 +4391,35 @@ function injectInFeedDownloadButtons(root = document) {
         if (fiberKey) {
             let curr = el[fiberKey];
             let depth = 0;
-            while (curr && depth < 30) {
-                const item = curr.memoizedProps?.item || curr.pendingProps?.item || curr.props?.item;
-                if (item && (item.video_versions || item.image_versions2)) {
-                    const isVideo = Boolean(item.video_versions && item.video_versions.length > 0);
-                    const videoUrl = item.video_versions?.slice()?.sort((a, b) => (b.width * b.height) - (a.width * a.height))[0]?.url || null;
-                    const imageUrl = item.image_versions2?.candidates?.slice()?.sort((a, b) => (b.width * b.height) - (a.width * a.height))[0]?.url || null;
-                    const url = isVideo ? (videoUrl || imageUrl) : (imageUrl || videoUrl);
-                    if (url) return { url, isVideo, id: item.id || item.pk, source: 'fiber' };
+            while (curr && depth < 35) {
+                const p = curr.memoizedProps || curr.pendingProps || curr.props;
+                if (p) {
+                    const item = p.item || p.media || p.story;
+                    if (item && (item.video_versions || item.image_versions2)) {
+                        const isVideo = Boolean(item.video_versions && item.video_versions.length > 0);
+                        const videoUrl = item.video_versions?.slice()?.sort((a, b) => (b.width * b.height) - (a.width * a.height))[0]?.url || null;
+                        const imageUrl = item.image_versions2?.candidates?.slice()?.sort((a, b) => (b.width * b.height) - (a.width * a.height))[0]?.url || null;
+                        const url = isVideo ? (videoUrl || imageUrl) : (imageUrl || videoUrl);
+                        if (url) return { url, isVideo, id: item.id || item.pk, source: 'fiber' };
+                    }
+                    if (Array.isArray(p.implementations)) {
+                        for (const impl of p.implementations) {
+                            const hd = impl?.data?.hdSrc || impl?.data?.sdSrc;
+                            if (hd && typeof hd === 'string' && /^https?:\/\//i.test(hd)) {
+                                return { url: hd, isVideo: true, id: null, source: 'fiber-impl-hd' };
+                            }
+                        }
+                        for (const impl of p.implementations) {
+                            if (impl?.data?.manifest && typeof impl.data.manifest === 'string') {
+                                const m = impl.data.manifest;
+                                const match = m.match(/<BaseURL>([^<]+)<\/BaseURL>/i);
+                                if (match && match[1]) {
+                                    const cleanUrl = match[1].replace(/&amp;/g, '&');
+                                    return { url: cleanUrl, isVideo: true, id: null, source: 'fiber-manifest' };
+                                }
+                            }
+                        }
+                    }
                 }
                 curr = curr.return;
                 depth++;
@@ -4513,8 +4573,16 @@ function injectInFeedDownloadButtons(root = document) {
                     showToast('Direct stream unavailable — try Open Raw');
                     return;
                 }
+                let uname = 'story';
                 const pathParts = location.pathname.split('/').filter(Boolean);
-                const uname = safeFilename(pathParts[1] || 'story');
+                if (pathParts[1] && pathParts[1] !== 'highlights') {
+                    uname = safeFilename(pathParts[1]);
+                } else {
+                    const uLink = document.querySelector('section header a[role="link"], header a[role="link"]');
+                    const uText = uLink?.textContent?.trim();
+                    if (uText) uname = safeFilename(uText);
+                    else uname = safeFilename(STATE.currentUser?.username || 'story');
+                }
                 const storyId = pathParts[2] || Date.now();
                 const ext = extensionFromUrl(media.url, media.isVideo ? 'mp4' : 'jpg');
                 const filename = `${uname}_story_${storyId}.${ext}`;
