@@ -1,6 +1,6 @@
 <div align="center">
 
-# IG MaxPland <sub>v3.3.0</sub>
+# IG MaxPland
 
 **Client-Side Relationship Intelligence & Precision HD Media Downloader for Instagram Web**
 
